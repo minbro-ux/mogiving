@@ -1,4 +1,4 @@
-import type { Funding, Participant, Product } from "./types";
+import type { Funding, Participant, Product, ShippingAddress } from "./types";
 
 /** 운영자 추천 큐레이션 (구매처 링크 포함) */
 export const PRODUCTS: Product[] = [
@@ -45,22 +45,32 @@ export function buildParticipants(amounts: number[]): Participant[] {
 
 export const sumAmount = (ps: Participant[]) => ps.reduce((s, p) => s + p.amount, 0);
 
-export function createFunding(product: Product, opts?: { title?: string; message?: string; days?: number }): Funding {
+export function createFunding(product: Product, opts?: { title?: string; message?: string; days?: number; round?: number }): Funding {
+  const round = opts?.round ?? 1;
   return {
     id: `f-${Date.now()}`,
     product,
     goal: product.price,
-    title: opts?.title || "내 생일 선물 펀딩",
+    title: opts?.title || (round > 1 ? `내 생일 선물 펀딩 ${round}탄` : "내 생일 선물 펀딩"),
     ownerName: "김토스",
     ownerMessage: opts?.message || "올해 생일엔 이 선물이 정말 갖고 싶어요! 마음 모아주시면 감사히 받을게요 🙏",
     deadline: Date.now() + (opts?.days ?? 7) * DAY,
     participants: [],
     phase: "active",
+    round,
   };
 }
 
 /** 시나리오 프리셋: 데모용으로 다양한 상태의 펀딩을 즉시 생성 */
-export type ScenarioKey = "active" | "achieved" | "under" | "over";
+export type ScenarioKey = "active" | "achieved" | "under" | "done";
+export const SCENARIO_KEYS: ScenarioKey[] = ["active", "achieved", "under", "done"];
+
+export const SAVED_ADDRESS: ShippingAddress = {
+  name: "김토스",
+  phone: "010-1234-5678",
+  address: "서울특별시 강남구 테헤란로 142",
+  detail: "아크플레이스 12층",
+};
 
 export function scenarioFunding(key: ScenarioKey, product: Product = PRODUCTS[0]): Funding {
   const base = createFunding(product, { title: "김토스의 생일 선물 펀딩" });
@@ -70,26 +80,20 @@ export function scenarioFunding(key: ScenarioKey, product: Product = PRODUCTS[0]
     active: [0.15, 0.1, 0.2, 0.06, 0.12, 0.09],
     achieved: [0.2, 0.15, 0.25, 0.1, 0.18],
     under: [0.15, 0.1, 0.12, 0.06, 0.08],
-    over: [0.25, 0.2, 0.3, 0.15, 0.2, 0.12],
+    done: [0.25, 0.1, 0.2, 0.15, 0.12, 0.08],
   };
   const amounts = ratios[key].map((r) => Math.round((g * r) / 1000) * 1000);
-  if (key === "achieved") amounts[amounts.length - 1] += g - amounts.reduce((a, b) => a + b, 0);
+  if (key === "achieved" || key === "done") amounts[amounts.length - 1] += g - amounts.reduce((a, b) => a + b, 0);
   const participants = buildParticipants(amounts);
 
   if (key === "active") return { ...base, deadline: Date.now() + 3 * DAY, participants };
-  if (key === "achieved")
-    return { ...base, participants, phase: "done", resolution: { kind: "gift", product, reason: "achieved", payout: g } };
-  return { ...base, deadline: Date.now() - 1000, participants, phase: key };
+  if (key === "achieved") return { ...base, participants, phase: "achieved" };
+  if (key === "done")
+    return {
+      ...base,
+      participants,
+      phase: "done",
+      resolution: { kind: "gift", product, reason: "achieved", collected: g, address: SAVED_ADDRESS },
+    };
+  return { ...base, deadline: Date.now() - 1000, participants, phase: "under" };
 }
-
-/** 미달 시: 모인 금액 안에서 살 수 있는 다른 선물 */
-export const recommendWithin = (budget: number, excludeId: string) =>
-  PRODUCTS.filter((p) => p.price <= budget && p.id !== excludeId)
-    .sort((a, b) => b.price - a.price)
-    .slice(0, 3);
-
-/** 초과 시: 목표보다 비싸지만 모인 총액 안에서 살 수 있는 상위 선물 */
-export const recommendUpgrade = (goal: number, budget: number, excludeId: string) =>
-  PRODUCTS.filter((p) => p.price > goal && p.price <= budget && p.id !== excludeId)
-    .sort((a, b) => b.price - a.price)
-    .slice(0, 3);

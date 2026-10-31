@@ -1,5 +1,12 @@
 export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
+/** 20000 → "2만 원", 5000 → "5천 원", 15000 → "1.5만 원" */
+export function shortWon(n: number) {
+  if (n >= 10000 && n % 1000 === 0) return `${(n / 10000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 원`;
+  if (n >= 1000 && n < 10000 && n % 1000 === 0) return `${n / 1000}천 원`;
+  return won(n);
+}
+
 export const percent = (raised: number, goal: number) =>
   goal <= 0 ? 0 : Math.floor((raised / goal) * 100);
 

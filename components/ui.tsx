@@ -121,6 +121,24 @@ export function ProgressBar({ value, tone = "blue" }: { value: number; tone?: "b
   );
 }
 
+/* --------------------------------- Piece grid -------------------------------- */
+
+/** 목표 금액을 N조각으로 나눈 격자: 모인 조각 / 지금 고른 조각 / 남은 조각 */
+export function PieceGrid({ total, filled, selected = 0 }: { total: number; filled: number; selected?: number }) {
+  return (
+    <div className="grid grid-cols-10 gap-1">
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className={`aspect-square rounded-[4px] transition-colors duration-300 ${
+            i < filled ? "bg-toss-blue" : i < filled + selected ? "bg-toss-blue/35 ring-1 ring-inset ring-toss-blue" : "bg-grey-200/70"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------- Product image ------------------------------- */
 
 export function ProductThumb({ product, size = "md", className = "" }: { product: Product; size?: "sm" | "md" | "lg" | "xl"; className?: string }) {

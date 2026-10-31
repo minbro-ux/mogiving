@@ -28,32 +28,44 @@ export type Participant = {
   isMe?: boolean;
 };
 
+/** 실물 배송지 */
+export type ShippingAddress = {
+  name: string;
+  phone: string;
+  address: string;
+  detail: string;
+};
+
+/**
+ * achieved: 목표 금액 100% 달성
+ * topup:    미달 → 부족한 차액을 받는 사람이 직접 결제하고 원래 선물
+ */
+export type GiftReason = "achieved" | "topup";
+
 /**
  * 펀딩 이후 정산 방식.
- * 오픈형 링크 모델이므로 모든 결과는 수령자 토스머니/계좌로의 송금으로 끝나고,
- * 수령자가 원래 쇼핑몰에서 직접 구매한다.
+ * 현금 송금·포인트·교환권 없이, 원래 쇼핑몰 상품을 실물 배송하거나 전액 승인 취소만 한다.
  */
 export type Resolution =
   | {
       kind: "gift";
       product: Product;
-      reason: "achieved" | "recommend" | "topup" | "refund" | "upgrade";
-      /** 수령자에게 송금된 총액 */
-      payout: number;
-      /** 수령자가 부족분으로 직접 보탠 금액 */
+      reason: GiftReason;
+      address: ShippingAddress;
+      /** 친구들이 모아준 금액 */
+      collected: number;
+      /** 수령자가 부족분으로 직접 결제한 금액 */
       extraPaid?: number;
-      /** 선물 구매 후 남는 금액 */
-      leftover?: number;
     }
-  | { kind: "cash"; amount: number; method: "toss-money" | "toss-point" };
+  | { kind: "cancel"; amount: number; count: number };
 
 /**
- * active: 모금 중
- * under:  마감됐지만 목표 미달 → 수령자 선택 필요
- * over:   목표 초과 → 수령자 선택 필요
- * done:   선물 수령 방식 확정 (resolution 존재)
+ * active:   모금 중 (목표 금액을 넘는 결제는 받지 않음)
+ * achieved: 목표 100% 달성 → 즉시 마감, 수령자가 배송지 입력
+ * under:    기간 만료로 마감됐지만 목표 미달 → 차액 결제 또는 전액 취소
+ * done:     배송 접수 또는 취소 완료 (resolution 존재)
  */
-export type Phase = "active" | "under" | "over" | "done";
+export type Phase = "active" | "achieved" | "under" | "done";
 
 export type Funding = {
   id: string;
@@ -66,4 +78,6 @@ export type Funding = {
   participants: Participant[];
   phase: Phase;
   resolution?: Resolution;
+  /** 몇 번째 모금함인지 (1차 완판 후 2탄, 3탄 …) */
+  round: number;
 };

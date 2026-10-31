@@ -7,8 +7,7 @@ import { ResolutionSheet } from "@/components/ResolutionSheet";
 import { ScenarioPanel } from "@/components/ScenarioPanel";
 import { ShopScreen } from "@/components/ShopScreen";
 import { Toast } from "@/components/ui";
-import { won } from "@/lib/format";
-import { type ScenarioKey, scenarioFunding, sumAmount } from "@/lib/mock";
+import { SCENARIO_KEYS, type ScenarioKey, scenarioFunding, sumAmount } from "@/lib/mock";
 import type { Funding, Participant, Phase, Resolution } from "@/lib/types";
 
 type Screen = "shop" | "funding";
@@ -22,18 +21,10 @@ const RANDOM_FRIENDS = [
 ];
 const RANDOM_AMOUNTS = [10000, 20000, 30000, 50000];
 
-/** 참여 금액이 바뀐 직후의 상태 전이: 정확히 100%면 즉시 송금, 초과면 즉시 마감 */
-function phaseAfterJoin(f: Funding, raised: number): Pick<Funding, "phase" | "resolution"> {
-  if (raised === f.goal) return { phase: "done", resolution: { kind: "gift", product: f.product, reason: "achieved", payout: raised } };
-  if (raised > f.goal) return { phase: "over" };
-  return { phase: "active" };
-}
+/** 마감 시점의 상태 전이 (참여 시점에는 목표 금액을 넘을 수 없으므로 달성 아니면 미달) */
+const phaseAtDeadline = (f: Funding, raised: number): Phase => (raised >= f.goal ? "achieved" : "under");
 
-/** 마감 시점의 상태 전이 */
-function phaseAtDeadline(f: Funding, raised: number): Pick<Funding, "phase" | "resolution"> {
-  if (raised === f.goal) return phaseAfterJoin(f, raised);
-  return { phase: raised > f.goal ? "over" : "under" };
-}
+const needsChoice = (p?: Phase) => p === "achieved" || p === "under";
 
 export default function Page() {
   const [screen, setScreen] = useState<Screen>("shop");
@@ -51,10 +42,10 @@ export default function Page() {
 
   const raised = funding ? sumAmount(funding.participants) : 0;
 
-  // 수령자 본인 화면에서 미달/초과 상태가 되면 선택 모달을 바로 띄움
+  // 수령자 본인 화면에서 달성/미달 상태가 되면 수령 모달을 바로 띄움
   const phase: Phase | undefined = funding?.phase;
   useEffect(() => {
-    if (screen === "funding" && role === "owner" && (phase === "under" || phase === "over")) setSheet("resolve");
+    if (screen === "funding" && role === "owner" && needsChoice(phase)) setSheet("resolve");
   }, [phase, role, screen]);
 
   /* ------------------------------- handlers ------------------------------- */
@@ -67,16 +58,16 @@ export default function Page() {
     window.scrollTo(0, 0);
   };
 
+  /** Hard Cap: 남은 금액까지만 결제되고, 100%에 닿는 순간 펀딩 성공으로 마감 */
   const addParticipant = (p: Omit<Participant, "id" | "createdAt">) => {
     if (!funding || funding.phase !== "active") return;
-    const participants = [...funding.participants, { ...p, id: `u-${Date.now()}`, createdAt: Date.now() }];
-    const total = sumAmount(participants);
-    const next = { ...funding, participants, ...phaseAfterJoin(funding, total) };
-    setFunding(next);
+    const amount = Math.min(p.amount, funding.goal - sumAmount(funding.participants));
+    if (amount <= 0) return;
+    const participants = [...funding.participants, { ...p, amount, id: `u-${Date.now()}`, createdAt: Date.now() }];
+    const achieved = sumAmount(participants) >= funding.goal;
+    setFunding({ ...funding, participants, phase: achieved ? "achieved" : "active" });
 
-    if (next.phase === "done") showToast("🎉 100% 달성! 토스머니로 송금 완료됐어요");
-    else if (next.phase === "over") showToast(`목표를 ${won(total - funding.goal)} 넘겨 펀딩이 마감됐어요`);
-    else showToast(`${p.nickname}님이 펀딩에 참여했어요`);
+    showToast(achieved ? "🎉 100% 달성! 펀딩이 성공적으로 마감됐어요" : `${p.nickname}님이 펀딩에 참여했어요`);
   };
 
   const randomJoin = () => {
@@ -87,7 +78,7 @@ export default function Page() {
 
   const closeNow = () => {
     if (!funding || funding.phase !== "active") return;
-    setFunding({ ...funding, deadline: Date.now() - 1000, ...phaseAtDeadline(funding, raised) });
+    setFunding({ ...funding, deadline: Date.now() - 1000, phase: phaseAtDeadline(funding, raised) });
     showToast("펀딩 기간이 끝났어요");
   };
 
@@ -95,7 +86,7 @@ export default function Page() {
     if (!funding) return;
     setFunding({ ...funding, phase: "done", resolution: r });
     setSheet(null);
-    showToast(`${won(r.kind === "gift" ? r.payout : r.amount)}을 받았어요`);
+    showToast(r.kind === "cancel" ? "모든 참여 결제가 승인 취소됐어요" : "🚚 배송 접수가 완료됐어요");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -107,10 +98,10 @@ export default function Page() {
     window.scrollTo(0, 0);
   };
 
-  // 데모 링크용: /?scenario=active|achieved|under|over
+  // 데모 링크용: /?scenario=active|achieved|under|done
   useEffect(() => {
     const k = new URLSearchParams(window.location.search).get("scenario");
-    if (k === "active" || k === "achieved" || k === "under" || k === "over") loadPreset(k);
+    if (SCENARIO_KEYS.includes(k as ScenarioKey)) loadPreset(k as ScenarioKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -126,7 +117,7 @@ export default function Page() {
   return (
     <main className="relative mx-auto min-h-dvh max-w-[430px] bg-white shadow-[0_0_40px_rgba(0,0,0,0.06)]">
       {screen === "shop" || !funding ? (
-        <ShopScreen onCreate={handleCreate} onBack={funding ? () => setScreen("funding") : undefined} />
+        <ShopScreen onCreate={handleCreate} onBack={funding ? () => setScreen("funding") : undefined} onToast={showToast} />
       ) : (
         <>
           <FundingScreen
@@ -140,6 +131,11 @@ export default function Page() {
             onParticipate={() => setSheet("participate")}
             onShare={() => setSheet("share")}
             onResolve={() => setSheet("resolve")}
+            onToast={showToast}
+            onCreateNext={(f) => {
+              handleCreate(f);
+              showToast(`${f.round}탄 모금함을 열었어요`);
+            }}
           />
           <ParticipateSheet
             open={sheet === "participate"}
@@ -152,7 +148,7 @@ export default function Page() {
             }}
           />
           <ShareSheet open={sheet === "share"} funding={funding} onClose={() => setSheet(null)} onCopied={() => showToast("링크를 복사했어요")} />
-          {(funding.phase === "under" || funding.phase === "over") && (
+          {needsChoice(funding.phase) && (
             <ResolutionSheet open={sheet === "resolve"} funding={funding} raised={raised} onClose={() => setSheet(null)} onResolve={resolve} />
           )}
         </>

@@ -7,9 +7,9 @@ import { BottomSheet, Button, OptionRow } from "./ui";
 
 const PRESETS: { key: ScenarioKey; emoji: string; title: string; desc: string }[] = [
   { key: "active", emoji: "⏳", title: "모금 진행 중", desc: "약 70% 모인 상태 · 참여/마감 테스트용" },
-  { key: "achieved", emoji: "💸", title: "100% 달성", desc: "토스머니 즉시 송금 완료 상태" },
-  { key: "under", emoji: "😢", title: "미달 마감", desc: "추천 선물 / 부족분 보태기 / 현금·포인트" },
-  { key: "over", emoji: "🎉", title: "초과 마감", desc: "남은 금액 받기 / 상위 선물 업그레이드" },
+  { key: "achieved", emoji: "🎯", title: "100% 달성 (즉시 마감)", desc: "배송지 입력 · 다음 모금함(2탄) 열기" },
+  { key: "under", emoji: "😢", title: "미달 마감", desc: "차액 결제 후 원래 선물 / 전액 승인 취소" },
+  { key: "done", emoji: "🗺️", title: "배송 접수 완료", desc: "지분 지도 · 지분 인증 카드 · 2탄 열기" },
 ];
 
 /** 기획 검증용 시뮬레이터: 상태를 즉시 바꿔 예외 시나리오를 확인 */
