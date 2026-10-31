@@ -49,18 +49,26 @@ export function toSharePayload(f: Funding): SharePayload {
   };
 }
 
+/** 원본 구매 링크 최대 길이 (쇼핑몰 추적 파라미터가 붙은 긴 링크도 수용) */
+export const MAX_URL = 4096;
+
 /** 서버 저장용: 공개 요약 + 운영자 전용 정보(x). 긴 링크(/f/eyJ…)에는 쓰지 않는다 */
 export function toStoredPayload(f: Funding): SharePayload {
-  const url = f.product.url;
-  return { ...toSharePayload(f), x: { u: url && /^https?:\/\//.test(url) ? url : undefined, g: f.goal, a: sumAmount(f.participants) } };
+  const url = f.product.url?.trim();
+  return { ...toSharePayload(f), x: { u: url && /^https?:\/\//i.test(url) && url.length <= MAX_URL ? url : undefined, g: f.goal, a: sumAmount(f.participants) } };
 }
 
 /** 저장 시 운영자 전용 정보만 검증·정리해 꺼낸다 (잘못된 값이면 버림) */
 export function adminExtra(s: SharePayload): SharePayload["x"] {
   const x = s.x;
-  if (!x || typeof x.g !== "number" || typeof x.a !== "number" || !isFinite(x.g) || !isFinite(x.a)) return undefined;
-  const u = typeof x.u === "string" && /^https?:\/\//.test(x.u) ? x.u.slice(0, 2000) : undefined;
-  return { u, g: Math.max(0, Math.round(x.g)), a: Math.max(0, Math.round(x.a)) };
+  if (!x) return undefined;
+  // 구매 링크는 금액 값과 독립적으로 보존한다. 잘라내면 깨진 링크가 되므로 길이 초과 시에만 버린다
+  const u = typeof x.u === "string" && /^https?:\/\//i.test(x.u) && x.u.length <= MAX_URL ? x.u : undefined;
+  const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? Math.max(0, Math.round(v)) : undefined);
+  const g = num(x.g);
+  const a = num(x.a);
+  if (g === undefined || a === undefined) return u ? { u, g: Math.max(0, Math.round(s.p.price)), a: Math.round((s.p.price * s.r) / 100) } : undefined;
+  return { u, g, a };
 }
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : undefined);

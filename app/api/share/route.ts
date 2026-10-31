@@ -5,7 +5,8 @@ import { saveShare } from "@/lib/shareStore";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_BODY = 8 * 1024;
+// 원본 구매 링크(최대 4KB)가 잘리거나 거절되지 않도록 여유를 둔다
+const MAX_BODY = 16 * 1024;
 
 /** POST /api/share { payload, shipping?, prev? } → { id, key } : 펀딩 공유용 짧은 링크 발급·갱신 */
 export async function POST(req: NextRequest) {

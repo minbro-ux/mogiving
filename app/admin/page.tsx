@@ -48,11 +48,12 @@ export default async function AdminPage({ searchParams }: Props) {
       {loadError && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">저장소에서 목록을 불러오지 못했어요. 잠시 후 새로고침해 주세요.</p>}
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="w-full min-w-[1100px] text-left text-sm">
+        <table className="w-full min-w-[1250px] text-left text-sm">
           <thead className="bg-gray-100 text-xs uppercase text-gray-600">
             <tr>
               <th className="px-3 py-2 font-semibold">등록 일시</th>
               <th className="px-3 py-2 font-semibold">상품</th>
+              <th className="px-3 py-2 font-semibold">구매 링크</th>
               <th className="px-3 py-2 font-semibold">옵션</th>
               <th className="px-3 py-2 font-semibold">펀딩 상태</th>
               <th className="px-3 py-2 font-semibold">배송 정보</th>
@@ -61,7 +62,7 @@ export default async function AdminPage({ searchParams }: Props) {
           <tbody className="divide-y divide-gray-100 align-top">
             {rows.length === 0 && !loadError && (
               <tr>
-                <td colSpan={5} className="px-3 py-10 text-center text-gray-400">
+                <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
                   아직 등록된 펀딩이 없어요
                 </td>
               </tr>
@@ -81,12 +82,20 @@ export default async function AdminPage({ searchParams }: Props) {
                   <div className="text-xs text-gray-500">
                     {[r.mall, r.brand].filter(Boolean).join(" · ")} · {r.owner}님
                   </div>
+                </td>
+                <td className="whitespace-nowrap px-3 py-3">
                   {r.productUrl ? (
-                    <a href={r.productUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-block text-xs font-semibold text-blue-600 hover:underline">
-                      원본 상품 바로가기 ↗
+                    <a
+                      href={r.productUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      title={r.productUrl}
+                      className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                    >
+                      상품 구매하러 가기 ↗
                     </a>
                   ) : (
-                    <span className="mt-1 inline-block text-xs text-gray-400">원본 링크 없음</span>
+                    <span className="text-gray-400">링크 없음</span>
                   )}
                 </td>
                 <td className="px-3 py-3">{r.option || <span className="text-gray-400">-</span>}</td>
