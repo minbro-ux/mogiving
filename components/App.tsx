@@ -9,7 +9,7 @@ import { ShopScreen } from "@/components/ShopScreen";
 import { Toast } from "@/components/ui";
 import { SCENARIO_KEYS, type ScenarioKey, scenarioFunding, sumAmount } from "@/lib/mock";
 import { recallUploadedImage, rememberUploadedImage } from "@/lib/image";
-import { shareFunding } from "@/lib/share";
+import { type ShortLink, fundingShareUrl, registerShortLink, shareFunding, shortShareUrl, toSharePayload } from "@/lib/share";
 import type { Funding, Participant, Phase, Resolution } from "@/lib/types";
 
 type Screen = "shop" | "funding";
@@ -28,8 +28,11 @@ const phaseAtDeadline = (f: Funding, raised: number): Phase => (raised >= f.goal
 
 const needsChoice = (p?: Phase) => p === "achieved" || p === "under";
 
-/** initialFunding: 공유 링크(/f/[token])로 들어온 경우 해당 펀딩 상세 화면부터 시작 */
-export function App({ initialFunding, initialRole = "owner" }: { initialFunding?: Funding; initialRole?: Role }) {
+/**
+ * initialFunding: 공유 링크(/f/[token])로 들어온 경우 해당 펀딩 상세 화면부터 시작
+ * initialShareId: 짧은 공유 링크로 들어왔다면 그 id (친구가 다시 공유할 때 같은 링크를 쓴다)
+ */
+export function App({ initialFunding, initialRole = "owner", initialShareId }: { initialFunding?: Funding; initialRole?: Role; initialShareId?: string }) {
   const [screen, setScreen] = useState<Screen>(initialFunding ? "funding" : "shop");
   const [funding, setFunding] = useState<Funding | null>(initialFunding ?? null);
   const [role, setRole] = useState<Role>(initialRole);
@@ -44,6 +47,38 @@ export function App({ initialFunding, initialRole = "owner" }: { initialFunding?
   }, []);
 
   const raised = funding ? sumAmount(funding.participants) : 0;
+
+  /* --------------------------- 짧은 공유 링크 (/f/[shortId]) --------------------------- */
+
+  type FundingShortLink = ShortLink & { fundingId: string };
+  const [shortLink, setShortLink] = useState<FundingShortLink | null>(
+    initialFunding && initialShareId ? { fundingId: initialFunding.id, id: initialShareId, key: null } : null,
+  );
+  const [shortLinkFailed, setShortLinkFailed] = useState(false);
+  const shortLinkRef = useRef(shortLink);
+  shortLinkRef.current = shortLink;
+  const currentFundingId = useRef(funding?.id);
+  currentFundingId.current = funding?.id;
+
+  // 공유 버튼을 누르는 순간 바로 공유 시트를 띄울 수 있게, 펀딩이 열리거나 달성률이 바뀔 때 미리 발급·갱신해 둔다
+  const sharePayloadKey = funding ? JSON.stringify(toSharePayload(funding)) : null;
+  useEffect(() => {
+    if (!funding) return;
+    const prev = shortLinkRef.current?.fundingId === funding.id ? shortLinkRef.current : null;
+    // 짧은 링크로 들어온 친구 화면: 남의 링크는 갱신 권한(key)이 없으니 받은 링크를 그대로 쓴다
+    if (prev && !prev.key) return;
+    setShortLinkFailed(false);
+    registerShortLink(funding, prev).then((r) => {
+      if (currentFundingId.current !== funding.id) return;
+      if (r) setShortLink({ ...r, fundingId: funding.id });
+      else setShortLinkFailed(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharePayloadKey]);
+
+  /** 모든 공유 버튼이 쓰는 링크. 발급 전이면 null, 발급 실패 시에만 긴 링크로 대체 */
+  const shareUrl =
+    funding && shortLink?.fundingId === funding.id ? shortShareUrl(shortLink.id) : funding && shortLinkFailed ? fundingShareUrl(funding) : null;
 
   // 직접 올린 사진은 공유 링크에 담을 수 없으므로, 펀딩 id로 보관해 두었다가 공유 링크(친구 시점)에서 복원
   const fundingId = funding?.id;
@@ -85,7 +120,13 @@ export function App({ initialFunding, initialRole = "owner" }: { initialFunding?
 
   const share = async () => {
     if (!funding) return;
-    const result = await shareFunding(funding);
+    let url = shareUrl;
+    if (!url) {
+      const r = await registerShortLink(funding);
+      url = r ? shortShareUrl(r.id) : fundingShareUrl(funding);
+      if (r) setShortLink({ ...r, fundingId: funding.id });
+    }
+    const result = await shareFunding(funding, url);
     if (result === "copied") showToast("링크를 복사했어요. 친구에게 붙여넣어 보내보세요");
     else if (result === "failed") showToast("링크를 복사하지 못했어요. 잠시 후 다시 시도해주세요");
   };
@@ -167,7 +208,7 @@ export function App({ initialFunding, initialRole = "owner" }: { initialFunding?
               addParticipant(p);
             }}
           />
-          <ShareSheet open={sheet === "share"} funding={funding} onClose={() => setSheet(null)} onCopied={() => showToast("링크를 복사했어요")} />
+          <ShareSheet open={sheet === "share"} link={shareUrl} onClose={() => setSheet(null)} onShare={share} onCopied={() => showToast("링크를 복사했어요")} />
           {needsChoice(funding.phase) && (
             <ResolutionSheet open={sheet === "resolve"} funding={funding} raised={raised} onClose={() => setSheet(null)} onResolve={resolve} />
           )}

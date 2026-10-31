@@ -1,13 +1,21 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { App } from "@/components/App";
-import { decodeShareToken, fundingFromShare, shareDescription, shareTitle } from "@/lib/share";
+import { type SharePayload, decodeShareToken, fundingFromShare, shareDescription, shareTitle } from "@/lib/share";
+import { SHORT_ID_RE, getShare } from "@/lib/shareStore";
 import { DEFAULT_OG_IMAGE, SITE_NAME } from "@/lib/site";
+
+export const dynamic = "force-dynamic";
 
 type Props = { params: { token: string } };
 
-export function generateMetadata({ params }: Props): Metadata {
-  const s = decodeShareToken(params.token);
+/** 짧은 id(/f/aB3xK9p)는 서버 저장소에서, 예전 긴 링크(/f/eyJ…)는 링크 자체에서 펀딩 요약을 꺼낸다 */
+async function resolveShare(token: string): Promise<SharePayload | null> {
+  return SHORT_ID_RE.test(token) ? getShare(token) : decodeShareToken(token);
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const s = await resolveShare(params.token);
   if (!s) return {};
   const title = shareTitle(s);
   const description = shareDescription(s);
@@ -30,8 +38,9 @@ export function generateMetadata({ params }: Props): Metadata {
 }
 
 /** 친구가 공유 링크로 들어오는 펀딩 상세 화면 */
-export default function SharedFundingPage({ params }: Props) {
-  const s = decodeShareToken(params.token);
+export default async function SharedFundingPage({ params }: Props) {
+  const s = await resolveShare(params.token);
   if (!s) notFound();
-  return <App initialFunding={fundingFromShare(s)} initialRole="friend" />;
+  const shortId = SHORT_ID_RE.test(params.token) ? params.token : undefined;
+  return <App initialFunding={fundingFromShare(s)} initialRole="friend" initialShareId={shortId} />;
 }

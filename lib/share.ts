@@ -4,8 +4,8 @@ import { linkOrigin } from "./site";
 import type { Funding, Product } from "./types";
 
 /**
- * 공유 링크에 담는 펀딩 요약.
- * 아직 서버 저장소가 없으므로 링크 자체에 담아 두고, 크롤러(OG)와 친구 화면 모두 여기서 복원한다.
+ * 공유 링크로 전달하는 펀딩 요약. 크롤러(OG)와 친구 화면 모두 여기서 복원한다.
+ * 기본은 서버 저장소에 넣고 짧은 id(/f/[shortId])로 공유하며, 저장에 실패하면 링크 자체에 담는다(/f/eyJ…).
  */
 export type SharePayload = {
   id: string;
@@ -44,11 +44,23 @@ export function toSharePayload(f: Funding): SharePayload {
   };
 }
 
+export function isSharePayload(v: unknown): v is SharePayload {
+  const s = v as SharePayload | null;
+  return (
+    typeof s?.id === "string" &&
+    typeof s.o === "string" &&
+    typeof s.t === "string" &&
+    typeof s.r === "number" &&
+    typeof s.d === "number" &&
+    typeof s.p?.name === "string" &&
+    typeof s.p.price === "number"
+  );
+}
+
 export function decodeShareToken(token: string): SharePayload | null {
   try {
-    const v = JSON.parse(fromBase64Url(decodeURIComponent(token))) as SharePayload;
-    if (typeof v?.o !== "string" || typeof v.r !== "number" || typeof v.p?.name !== "string" || typeof v.p.price !== "number") return null;
-    return v;
+    const v: unknown = JSON.parse(fromBase64Url(decodeURIComponent(token)));
+    return isSharePayload(v) ? v : null;
   } catch {
     return null;
   }
@@ -56,7 +68,31 @@ export function decodeShareToken(token: string): SharePayload | null {
 
 export const fundingSharePath = (f: Funding) => `/f/${toBase64Url(JSON.stringify(toSharePayload(f)))}`;
 
+/** 저장소 없이 펀딩 요약을 통째로 담은 긴 링크 (짧은 링크 발급 실패 시 대체용) */
 export const fundingShareUrl = (f: Funding) => new URL(fundingSharePath(f), linkOrigin()).toString();
+
+export type ShortLink = { id: string; key: string | null };
+
+export const shortShareUrl = (id: string) => new URL(`/f/${id}`, linkOrigin()).toString();
+
+/**
+ * 짧은 공유 링크 발급. prev의 비밀 key가 있으면 같은 id에 최신 달성률만 갱신해 링크가 그대로 유지된다.
+ * 실패하면 null (호출하는 쪽에서 긴 링크로 대체)
+ */
+export async function registerShortLink(f: Funding, prev?: ShortLink | null): Promise<ShortLink | null> {
+  try {
+    const res = await fetch("/api/share", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: toSharePayload(f), prev: prev?.key ? prev : undefined }),
+    });
+    if (!res.ok) return null;
+    const v = (await res.json()) as { id?: unknown; key?: unknown };
+    return typeof v.id === "string" && typeof v.key === "string" ? { id: v.id, key: v.key } : null;
+  } catch {
+    return null;
+  }
+}
 
 export const shareTitle = (s: SharePayload) => `${s.o}님의 위시리스트 · ${s.p.name} 조각 펀딩`;
 export const shareDescription = (s: SharePayload) => `커피 한 잔 값으로 축하를 전해보세요. 현재 ${s.r}% 달성 중!`;
@@ -122,8 +158,7 @@ export async function shareOrCopy(data: ShareData, fallbackText: string): Promis
 }
 
 /** 펀딩 공유: 공유 시트에는 제목·설명·링크를, 미지원 환경에서는 링크만 복사 */
-export function shareFunding(f: Funding) {
+export function shareFunding(f: Funding, url: string) {
   const s = toSharePayload(f);
-  const url = fundingShareUrl(f);
   return shareOrCopy({ title: shareTitle(s), text: shareDescription(s), url }, url);
 }

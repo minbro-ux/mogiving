@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Copy, Link2, Lock, MessageCircle, Minus, Plus, Send } from "lucide-react";
 import { shortWon, won } from "@/lib/format";
 import { pieceInfo, piecesAmount } from "@/lib/pieces";
-import { copyText, fundingShareUrl } from "@/lib/share";
+import { copyText } from "@/lib/share";
 import type { Funding, Participant } from "@/lib/types";
 import { BottomSheet, Button, PieceGrid, ProductThumb, Segmented, Spinner } from "./ui";
 
@@ -250,10 +250,23 @@ function StepButton({ label, disabled, onClick, children }: { label: string; dis
 
 /* --------------------------------- 공유 시트 --------------------------------- */
 
-export function ShareSheet({ open, funding, onClose, onCopied }: { open: boolean; funding: Funding; onClose: () => void; onCopied: () => void }) {
-  const link = fundingShareUrl(funding);
-
+/** link: 짧은 공유 링크 (발급 중이면 null). 복사·카카오톡·토스 친구 모두 이 링크 하나만 넘긴다 */
+export function ShareSheet({
+  open,
+  link,
+  onClose,
+  onShare,
+  onCopied,
+}: {
+  open: boolean;
+  link: string | null;
+  onClose: () => void;
+  /** 카카오톡·토스 친구: 네이티브 공유 시트 (미지원 시 링크 복사) */
+  onShare: () => void;
+  onCopied: () => void;
+}) {
   const copy = async () => {
+    if (!link) return;
     await copyText(link);
     onCopied();
   };
@@ -262,12 +275,12 @@ export function ShareSheet({ open, funding, onClose, onCopied }: { open: boolean
     <BottomSheet open={open} onClose={onClose} title="친구에게 공유하기" description="링크를 받은 친구는 토스에서 바로 조각을 선물할 수 있어요.">
       <div className="mt-4 flex items-center gap-2 rounded-xl bg-grey-100 py-1.5 pl-4 pr-1.5">
         <Link2 size={17} className="shrink-0 text-grey-500" />
-        <span className="flex-1 truncate text-[15px] text-grey-700">{link}</span>
-        <Button size="sm" full={false} variant="weak" onClick={copy}>
+        <span className={`flex-1 truncate text-[15px] ${link ? "text-grey-700" : "text-grey-400"}`}>{link ?? "공유 링크를 만들고 있어요…"}</span>
+        <Button size="sm" full={false} variant="weak" onClick={copy} disabled={!link}>
           <Copy size={14} /> 복사
         </Button>
       </div>
-      <ShareTargets onPick={copy} />
+      <ShareTargets onPick={(t) => (t === "copy" ? copy() : link && onShare())} />
     </BottomSheet>
   );
 }
