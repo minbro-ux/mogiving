@@ -18,6 +18,11 @@ export type SharePayload = {
   /** 마감 시각 */
   d: number;
   p: Pick<Product, "id" | "brand" | "name" | "price" | "emoji" | "bg" | "category" | "mall"> & { img?: string; opt?: string };
+  /**
+   * 운영자(관리자 페이지) 전용 정보. 저장소에만 보관하고 publicPayload에서 걸러지므로 공유 화면·OG에는 나가지 않는다
+   * u: 원본 상품 링크, g: 목표 금액, a: 현재 모인 금액
+   */
+  x?: { u?: string; g: number; a: number };
 };
 
 const toBase64Url = (s: string) => {
@@ -42,6 +47,20 @@ export function toSharePayload(f: Funding): SharePayload {
     // blob: 등 로컬 이미지는 외부에서 열 수 없으므로 공개 주소만 담는다
     p: { id, brand, name, price, emoji, bg, category, mall, img: imageUrl && /^https?:\/\//.test(imageUrl) ? imageUrl : undefined, opt: option || undefined },
   };
+}
+
+/** 서버 저장용: 공개 요약 + 운영자 전용 정보(x). 긴 링크(/f/eyJ…)에는 쓰지 않는다 */
+export function toStoredPayload(f: Funding): SharePayload {
+  const url = f.product.url;
+  return { ...toSharePayload(f), x: { u: url && /^https?:\/\//.test(url) ? url : undefined, g: f.goal, a: sumAmount(f.participants) } };
+}
+
+/** 저장 시 운영자 전용 정보만 검증·정리해 꺼낸다 (잘못된 값이면 버림) */
+export function adminExtra(s: SharePayload): SharePayload["x"] {
+  const x = s.x;
+  if (!x || typeof x.g !== "number" || typeof x.a !== "number" || !isFinite(x.g) || !isFinite(x.a)) return undefined;
+  const u = typeof x.u === "string" && /^https?:\/\//.test(x.u) ? x.u.slice(0, 2000) : undefined;
+  return { u, g: Math.max(0, Math.round(x.g)), a: Math.max(0, Math.round(x.a)) };
 }
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : undefined);
@@ -120,7 +139,7 @@ export async function registerShortLink(f: Funding, prev?: ShortLink | null): Pr
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // 배송지는 공개 payload와 분리해 보낸다 (서버에만 보관, 링크·친구 화면에는 나가지 않음)
-      body: JSON.stringify({ payload: toSharePayload(f), shipping: f.shipping, prev: prev?.key ? prev : undefined }),
+      body: JSON.stringify({ payload: toStoredPayload(f), shipping: f.shipping, prev: prev?.key ? prev : undefined }),
     });
     if (!res.ok) return null;
     const v = (await res.json()) as { id?: unknown; key?: unknown };

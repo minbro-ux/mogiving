@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
-import { type SharePayload, publicPayload } from "./share";
+import { type SharePayload, adminExtra, publicPayload } from "./share";
 import type { ShippingAddress } from "./types";
 
 /**
@@ -30,7 +30,18 @@ interface ShareStore {
   insert(id: string, keyHash: string, payload: SharePayload, shipping?: ShippingAddress): Promise<boolean>;
   /** 공개 요약(payload 컬럼)만 읽는다 */
   get(id: string): Promise<SharePayload | null>;
+  /** 관리자 페이지용 전체 목록 (배송지 포함, 최신 등록순) */
+  list(): Promise<AdminShareRow[]>;
 }
+
+/** 관리자 페이지 전용 행. 서버에서만 만들고 /admin 화면·CSV로만 내보낸다 */
+export type AdminShareRow = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  payload: SharePayload;
+  shipping: ShippingAddress | null;
+};
 
 /* ------------------------------ Supabase (배포용) ------------------------------ */
 
@@ -68,12 +79,18 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
       const rows = (await res.json()) as { payload: SharePayload }[];
       return rows[0]?.payload ?? null;
     },
+    async list() {
+      const res = await call(`?select=id,payload,shipping,created_at,updated_at&order=created_at.desc&limit=1000`, { method: "GET" });
+      if (!res.ok) throw new Error(`supabase list ${res.status}`);
+      const rows = (await res.json()) as { id: string; payload: SharePayload; shipping: ShippingAddress | null; created_at: string; updated_at: string }[];
+      return rows.map((r) => ({ id: r.id, payload: r.payload, shipping: r.shipping, createdAt: r.created_at, updatedAt: r.updated_at }));
+    },
   };
 }
 
 /* ------------------------------ 로컬 파일 (개발용) ------------------------------ */
 
-type FileEntry = { keyHash: string; payload: SharePayload; shipping?: ShippingAddress; updatedAt: number };
+type FileEntry = { keyHash: string; payload: SharePayload; shipping?: ShippingAddress; createdAt?: number; updatedAt: number };
 
 function fileStore(): ShareStore {
   const file = path.join(process.env.SHARE_STORE_DIR ?? path.join(process.cwd(), ".data"), "shares.json");
@@ -101,12 +118,23 @@ function fileStore(): ShareStore {
     async insert(id, keyHash, payload, shipping) {
       const store = await load();
       if (store[id]) return false;
-      store[id] = { keyHash, payload, shipping, updatedAt: Date.now() };
+      store[id] = { keyHash, payload, shipping, createdAt: Date.now(), updatedAt: Date.now() };
       await save(store);
       return true;
     },
     async get(id) {
       return (await load())[id]?.payload ?? null;
+    },
+    async list() {
+      return Object.entries(await load())
+        .map(([id, e]) => ({
+          id,
+          payload: e.payload,
+          shipping: e.shipping ?? null,
+          createdAt: new Date(e.createdAt ?? e.updatedAt).toISOString(),
+          updatedAt: new Date(e.updatedAt).toISOString(),
+        }))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
   };
 }
@@ -129,8 +157,10 @@ function exclusive<T>(fn: () => Promise<T>): Promise<T> {
  * prev(id + 비밀 key)가 맞으면 같은 id의 내용(달성률 등)만 갱신해 링크가 바뀌지 않게 한다.
  */
 export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: ShippingAddress): Promise<ShortLink> {
-  // payload 컬럼에는 공개 필드만 (클라이언트가 끼워 넣은 값은 화이트리스트로 걸러짐)
-  const pub = publicPayload(payload);
+  // payload 컬럼에는 공개 필드 + 운영자 전용 정보(x)만 (그 밖에 클라이언트가 끼워 넣은 값은 화이트리스트로 걸러짐).
+  // x는 읽을 때 publicPayload에서 다시 빠지므로 공유 화면에는 나가지 않는다
+  const x = adminExtra(payload);
+  const pub: SharePayload = { ...publicPayload(payload), ...(x ? { x } : {}) };
   return exclusive(async () => {
     if (prev && SHORT_ID_RE.test(prev.id) && (await store.update(prev, pub, shipping))) return prev;
     const key = randomCode(24);
@@ -151,4 +181,9 @@ export async function getShare(id: string): Promise<SharePayload | null> {
   } catch {
     return null;
   }
+}
+
+/** 관리자 페이지 전용: 배송지까지 포함한 전체 목록 (최신 등록순). 반드시 관리자 인증 뒤에만 호출할 것 */
+export function listSharesForAdmin(): Promise<AdminShareRow[]> {
+  return store.list();
 }

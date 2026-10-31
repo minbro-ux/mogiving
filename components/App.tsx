@@ -9,7 +9,7 @@ import { ShopScreen } from "@/components/ShopScreen";
 import { Toast } from "@/components/ui";
 import { SCENARIO_KEYS, type ScenarioKey, scenarioFunding, sumAmount } from "@/lib/mock";
 import { recallUploadedImage, rememberUploadedImage } from "@/lib/image";
-import { type ShortLink, fundingShareUrl, registerShortLink, shareFunding, shortShareUrl, toSharePayload } from "@/lib/share";
+import { type ShortLink, fundingShareUrl, registerShortLink, shareFunding, shortShareUrl, toStoredPayload } from "@/lib/share";
 import type { Funding, Participant, Phase, Resolution } from "@/lib/types";
 
 type Screen = "shop" | "funding";
@@ -61,7 +61,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   currentFundingId.current = funding?.id;
 
   // 공유 버튼을 누르는 순간 바로 공유 시트를 띄울 수 있게, 펀딩이 열리거나 달성률이 바뀔 때 미리 발급·갱신해 둔다
-  const sharePayloadKey = funding ? JSON.stringify(toSharePayload(funding)) : null;
+  const sharePayloadKey = funding ? JSON.stringify(toStoredPayload(funding)) : null;
   useEffect(() => {
     if (!funding) return;
     const prev = shortLinkRef.current?.fundingId === funding.id ? shortLinkRef.current : null;
