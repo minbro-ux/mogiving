@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, ChevronLeft, ChevronRight, Gift, Link2, PackageCheck, Search, Sparkles, Star } from "lucide-react";
 import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
-import { EXAMPLE_LINKS, type ParsedLink, parseLink } from "@/lib/crawl";
+import { type ParsedLink, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
 import { PeriodPicker, SafetyNote } from "./FundingForm";
@@ -221,22 +221,6 @@ function LinkInputForm({ onImport }: { onImport: (l: ParsedLink) => void }) {
           <AlertCircle size={14} /> {error}
         </p>
       )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <span className="text-[12px] text-grey-500">예시 링크</span>
-        {EXAMPLE_LINKS.map((l) => (
-          <button
-            key={l.mall}
-            onClick={() => {
-              setValue(l.url);
-              submit(l.url);
-            }}
-            className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-grey-700 active:bg-grey-100"
-          >
-            {l.mall}
-          </button>
-        ))}
-      </div>
     </>
   );
 }

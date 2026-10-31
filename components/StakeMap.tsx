@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Download, Instagram, MessageCircle, Sparkles } from "lucide-react";
 import { won } from "@/lib/format";
+import { sumAmount } from "@/lib/mock";
+import { pieceInfo } from "@/lib/pieces";
 import type { Funding, Product } from "@/lib/types";
 import { Badge, BottomSheet, Button, ProductThumb, Switch } from "./ui";
 
@@ -10,7 +12,10 @@ const STAKE_COLORS = ["#0064FF", "#F04452", "#03B26C", "#FE9800", "#8B5CF6", "#0
 
 export type Stake = { key: string; name: string; amount: number; ratio: number; color: string; isMe?: boolean; isOwner?: boolean };
 
-/** 참여자별 금액을 닉네임 단위로 합산해 지분 비율 계산. 받는 사람이 직접 낸 차액도 지분에 포함 */
+/**
+ * 참여자별 금액을 닉네임 단위로 합산해 지분 비율 계산. 받는 사람이 직접 낸 차액도 지분에 포함.
+ * 비율의 분모는 '모인 금액'이 아니라 선물 목표 금액 (69만 원 중 3만 원 → 4.3%)
+ */
 export function computeStakes(f: Funding): Stake[] {
   const byName = new Map<string, { amount: number; isMe?: boolean }>();
   for (const p of f.participants) {
@@ -21,13 +26,27 @@ export function computeStakes(f: Funding): Stake[] {
   if (f.resolution?.kind === "gift" && f.resolution.extraPaid)
     rows.push({ key: "__owner", name: f.ownerName, amount: f.resolution.extraPaid, isMe: false, isOwner: true });
 
-  const total = rows.reduce((s, r) => s + r.amount, 0) || 1;
+  const total = Math.max(f.goal, rows.reduce((s, r) => s + r.amount, 0)) || 1;
   return rows
     .sort((a, b) => b.amount - a.amount)
     .map((r, i) => ({ ...r, ratio: r.amount / total, color: STAKE_COLORS[i % STAKE_COLORS.length] }));
 }
 
-export const stakePct = (s: Stake) => (s.ratio < 0.01 ? "<1" : String(Math.round(s.ratio * 100)));
+/** 목표 금액 대비 비율 → "4.3", "12", "<0.1" (10% 미만은 소수 첫째 자리까지) */
+export function ratioPct(ratio: number) {
+  const pct = ratio * 100;
+  if (pct > 0 && pct < 0.1) return "<0.1";
+  return pct < 10 ? String(Math.round(pct * 10) / 10) : String(Math.round(pct));
+}
+
+export const stakePct = (s: Stake) => ratioPct(s.ratio);
+
+/** 아직 모이지 않은 잔여 지분 (목표 금액 대비) */
+export function remainingStake(f: Funding) {
+  const paid = sumAmount(f.participants) + (f.resolution?.kind === "gift" ? f.resolution.extraPaid ?? 0 : 0);
+  const amount = Math.max(0, f.goal - paid);
+  return { amount, ratio: f.goal > 0 ? amount / f.goal : 0, pieces: pieceInfo(f.goal, paid).remaining };
+}
 
 /* ------------------------------ 트리맵 레이아웃 ------------------------------ */
 
@@ -73,21 +92,31 @@ export function StakeOverlay({
   stakes,
   label,
   muted,
+  remaining = 0,
+  remainingLabel,
   className = "",
 }: {
   product: Product;
   stakes: Stake[];
   label: (s: Stake) => StakeLabel;
   muted?: (s: Stake) => boolean;
+  /** 아직 모이지 않은 금액. 사진에서 이만큼은 흑백·회색 영역으로 남긴다 */
+  remaining?: number;
+  remainingLabel?: string;
   className?: string;
 }) {
-  const rects = useMemo(() => treemap(stakes.map((s) => s.amount), { x: 0, y: 0, w: 100, h: 100 }), [stakes]);
+  // 사진 전체 = 목표 금액. 참여 지분을 큰 순서로 채우고, 남은 금액은 마지막(오른쪽·아래) 영역으로 둔다
+  const rects = useMemo(
+    () => treemap([...stakes.map((s) => s.amount), ...(remaining > 0 ? [remaining] : [])], { x: 0, y: 0, w: 100, h: 100 }),
+    [stakes, remaining],
+  );
+  const restRect = remaining > 0 ? rects[stakes.length] : undefined;
   return (
     <div className={`relative ${className}`}>
       <ProductThumb product={product} size="xl" className="!rounded-[24px]" />
       <div className="absolute inset-0 animate-fade-in overflow-hidden rounded-[24px]">
-        {rects.map((r, i) => {
-          const s = stakes[i];
+        {stakes.map((s, i) => {
+          const r = rects[i];
           const off = muted?.(s);
           const l = label(s);
           const area = r.w * r.h;
@@ -116,6 +145,29 @@ export function StakeOverlay({
             </div>
           );
         })}
+        {restRect && (
+          <div
+            className="absolute flex items-center justify-center p-1"
+            style={{
+              left: `${restRect.x}%`,
+              top: `${restRect.y}%`,
+              width: `${restRect.w}%`,
+              height: `${restRect.h}%`,
+              // 남은 조각: 사진을 흑백으로 바래게 해서 아직 채워지지 않은 자리임을 보여준다
+              backdropFilter: "grayscale(1)",
+              WebkitBackdropFilter: "grayscale(1)",
+              backgroundColor: "rgba(229,232,235,0.72)",
+              boxShadow: "inset 0 0 0 1.5px rgba(139,149,161,0.55)",
+              backgroundImage: "repeating-linear-gradient(135deg, rgba(139,149,161,0.16) 0 6px, transparent 6px 12px)",
+            }}
+          >
+            {remainingLabel && restRect.w * restRect.h > 80 && (
+              <span className="max-w-full truncate rounded-full bg-white/90 px-2 py-0.5 text-center text-[11px] font-bold leading-tight text-grey-600 shadow-sm">
+                {remainingLabel}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -138,7 +190,9 @@ export function StakeMapSheet({
   onMakeCard?: () => void;
 }) {
   const stakes = useMemo(() => computeStakes(funding), [funding]);
+  const rest = remainingStake(funding);
   const me = stakes.find((s) => s.isMe);
+  const filledPct = ratioPct(1 - rest.ratio);
 
   return (
     <BottomSheet
@@ -160,7 +214,19 @@ export function StakeMapSheet({
         stakes={stakes}
         label={(s) => (viewerIsOwner ? { name: s.name, pct: stakePct(s) } : s.isMe ? { name: "나", pct: stakePct(s) } : null)}
         muted={viewerIsOwner ? undefined : (s) => !s.isMe}
+        remaining={rest.amount}
+        remainingLabel={`남은 ${rest.pieces}조각 · ${ratioPct(rest.ratio)}%`}
       />
+
+      <div className="mt-3 flex items-center justify-between text-[13px]">
+        <span className="font-semibold text-grey-800">목표 {won(funding.goal)} 중 {filledPct}% 채워졌어요</span>
+        {rest.amount > 0 && (
+          <span className="flex items-center gap-1.5 text-grey-500">
+            <span className="h-2.5 w-2.5 rounded-[3px] border border-grey-400 bg-grey-200" />
+            남은 조각 {rest.pieces}개
+          </span>
+        )}
+      </div>
 
       {viewerIsOwner ? (
         <>
@@ -178,6 +244,14 @@ export function StakeMapSheet({
                 </span>
               </li>
             ))}
+            {rest.amount > 0 && (
+              <li className="flex items-center gap-3 border-t border-dashed border-grey-200 pt-3">
+                <span className="h-3 w-3 shrink-0 rounded-full border border-grey-400 bg-grey-200" />
+                <span className="min-w-0 flex-1 text-[15px] font-semibold text-grey-500">남은 조각 {rest.pieces}개</span>
+                <span className="text-[13px] text-grey-400">{won(rest.amount)}</span>
+                <span className="w-12 text-right text-[15px] font-bold text-grey-400">{ratioPct(rest.ratio)}%</span>
+              </li>
+            )}
           </ul>
           {!onMakeCard && <p className="pb-2 pt-5 text-[13px] text-grey-500">펀딩이 완료되면 공유용 지분 인증 카드를 만들 수 있어요.</p>}
         </>
@@ -185,7 +259,7 @@ export function StakeMapSheet({
         <div className="mb-2 mt-5 rounded-2xl bg-grey-50 p-4 text-center">
           {me ? (
             <>
-              <p className="text-[13px] text-grey-500">이 선물에서 내 지분</p>
+              <p className="text-[13px] text-grey-500">선물 목표 금액 중 내 지분</p>
               <p className="mt-0.5 text-[24px] font-bold" style={{ color: me.color }}>
                 {stakePct(me)}%
               </p>
@@ -218,6 +292,7 @@ export function StakeCardSheet({
 }) {
   const [showPct, setShowPct] = useState(true);
   const stakes = useMemo(() => computeStakes(funding), [funding]);
+  const rest = remainingStake(funding);
   const product = funding.product;
   const friends = stakes.filter((s) => !s.isOwner).length;
   const top = stakes.slice(0, 4);
@@ -242,6 +317,8 @@ export function StakeCardSheet({
             product={product}
             stakes={stakes}
             label={(s) => ({ name: s.name, pct: showPct ? stakePct(s) : undefined })}
+            remaining={rest.amount}
+            remainingLabel={showPct ? `남은 ${ratioPct(rest.ratio)}%` : "남은 조각"}
           />
 
           <ul className="mt-3 space-y-1.5">

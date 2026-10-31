@@ -8,6 +8,7 @@ import { ScenarioPanel } from "@/components/ScenarioPanel";
 import { ShopScreen } from "@/components/ShopScreen";
 import { Toast } from "@/components/ui";
 import { SCENARIO_KEYS, type ScenarioKey, scenarioFunding, sumAmount } from "@/lib/mock";
+import { recallUploadedImage, rememberUploadedImage } from "@/lib/image";
 import { shareFunding } from "@/lib/share";
 import type { Funding, Participant, Phase, Resolution } from "@/lib/types";
 
@@ -43,6 +44,16 @@ export function App({ initialFunding, initialRole = "owner" }: { initialFunding?
   }, []);
 
   const raised = funding ? sumAmount(funding.participants) : 0;
+
+  // 직접 올린 사진은 공유 링크에 담을 수 없으므로, 펀딩 id로 보관해 두었다가 공유 링크(친구 시점)에서 복원
+  const fundingId = funding?.id;
+  const imageUrl = funding?.product.imageUrl;
+  useEffect(() => {
+    if (!fundingId) return;
+    if (imageUrl) return rememberUploadedImage(fundingId, imageUrl);
+    const saved = recallUploadedImage(fundingId);
+    if (saved) setFunding((f) => (f && f.id === fundingId && !f.product.imageUrl ? { ...f, product: { ...f.product, imageUrl: saved } } : f));
+  }, [fundingId, imageUrl]);
 
   // 수령자 본인 화면에서 달성/미달 상태가 되면 수령 모달을 바로 띄움
   const phase: Phase | undefined = funding?.phase;

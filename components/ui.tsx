@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import type { Product } from "@/lib/types";
 
@@ -148,11 +148,14 @@ export function ProductThumb({ product, size = "md", className = "" }: { product
     lg: "aspect-square w-full rounded-2xl text-6xl",
     xl: "aspect-square w-full rounded-[28px] text-[96px]",
   }[size];
+  // 쇼핑몰 CDN이 핫링크를 막아 이미지가 깨지면 이모지 썸네일로 대체
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
+  const src = product.imageUrl && product.imageUrl !== brokenSrc ? product.imageUrl : undefined;
   return (
     <div className={`flex shrink-0 select-none items-center justify-center overflow-hidden ${S} ${className}`} style={{ backgroundColor: product.bg }}>
-      {product.imageUrl ? (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
+        <img src={src} alt={product.name} referrerPolicy="no-referrer" onError={() => setBrokenSrc(src)} className="h-full w-full object-cover" />
       ) : (
         <span className="drop-shadow-sm">{product.emoji}</span>
       )}

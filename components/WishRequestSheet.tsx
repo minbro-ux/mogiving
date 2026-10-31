@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Copy, Link2 } from "lucide-react";
-import { ShareTargets } from "./FundingSheets";
+import { copyText, shareOrCopy } from "@/lib/share";
+import { linkOrigin } from "@/lib/site";
+import { type ShareTarget, ShareTargets } from "./FundingSheets";
 import { BottomSheet, Button } from "./ui";
 
 const OCCASIONS = [
@@ -15,7 +17,7 @@ const OCCASIONS = [
 
 /**
  * 역발상 진입 플로우: 축하받을 친구에게 "원하는 선물 링크를 보내줘"라고 요청하는 초대 링크 생성.
- * 친구가 링크에서 상품 URL을 등록하면 그 친구 명의의 펀딩이 열리는 구조 (현재는 더미 링크).
+ * 친구가 링크(/r/[code])에서 상품 URL을 등록하면 그 친구 명의의 펀딩이 열리는 구조.
  */
 export function WishRequestSheet({ open, onClose, onCopied }: { open: boolean; onClose: () => void; onCopied: (msg: string) => void }) {
   const [occasion, setOccasion] = useState(OCCASIONS[0].label);
@@ -30,18 +32,23 @@ export function WishRequestSheet({ open, onClose, onCopied }: { open: boolean; o
   }, [open]);
 
   const o = OCCASIONS.find((x) => x.label === occasion) ?? OCCASIONS[0];
-  const link = `https://mogiving.toss.im/r/${code}`;
+  const link = new URL(`/r/${code}`, linkOrigin()).toString();
   const name = friend.trim() || "친구";
   const message = `${name}님, ${o.label} 정말 축하해요! ${o.emoji}\n받고 싶은 선물 링크를 남겨주면 친구들이랑 마음 모아 선물할게요.`;
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(`${message}\n${link}`);
-    } catch {
-      /* 웹뷰 등 클립보드 권한이 없는 환경 */
-    }
-    onCopied("초대 링크를 복사했어요. 카톡이나 토스로 보내보세요");
+  /** [복사]·[링크 복사]: 주소창에 바로 붙여넣을 수 있게 순수 URL만 복사 */
+  const copyLink = async () => {
+    onCopied((await copyText(link)) ? "링크를 복사했어요" : "링크를 복사하지 못했어요. 직접 선택해 복사해주세요");
   };
+
+  /** 카카오톡·토스 친구: 메신저로 보낼 때만 축하 문구 + 링크를 함께 보낸다 */
+  const shareMessage = async () => {
+    const result = await shareOrCopy({ title: "모기빙 위시리스트 요청", text: message, url: link }, `${message}\n${link}`);
+    if (result === "copied") onCopied("초대 메시지를 복사했어요. 메신저 대화창에 붙여넣어 보내보세요");
+    else if (result === "failed") onCopied("메시지를 복사하지 못했어요. 잠시 후 다시 시도해주세요");
+  };
+
+  const onPick = (target: ShareTarget) => (target === "copy" ? copyLink() : shareMessage());
 
   return (
     <BottomSheet open={open} onClose={onClose} title="위시리스트 요청하기" description="친구가 원하는 선물 링크를 등록하면 바로 함께 모을 수 있어요.">
@@ -85,11 +92,11 @@ export function WishRequestSheet({ open, onClose, onCopied }: { open: boolean; o
       <div className="mt-4 flex items-center gap-2 rounded-xl bg-grey-100 py-1.5 pl-4 pr-1.5">
         <Link2 size={17} className="shrink-0 text-grey-500" />
         <span className="flex-1 truncate text-[15px] text-grey-700">{link}</span>
-        <Button size="sm" full={false} variant="weak" onClick={copy}>
+        <Button size="sm" full={false} variant="weak" onClick={copyLink}>
           <Copy size={14} /> 복사
         </Button>
       </div>
-      <ShareTargets onPick={copy} />
+      <ShareTargets onPick={onPick} />
     </BottomSheet>
   );
 }

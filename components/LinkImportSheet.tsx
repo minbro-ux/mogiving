@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Camera, Check, ExternalLink, Gift, ImageIcon, Pencil, RotateCw } from "lucide-react";
 import { CRAWL_ERROR_TEXT, type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { won } from "@/lib/format";
+import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
 import type { Funding, Product } from "@/lib/types";
 import { FormField, PeriodPicker, PriceInput, SafetyNote, inputClass } from "./FundingForm";
@@ -44,21 +45,36 @@ export function LinkImportSheet({
   const [url, setUrl] = useState(link?.url ?? "");
   const [days, setDays] = useState(7);
 
-  useEffect(() => setTarget(link), [link]);
+  // 새 링크가 들어오면 이전 상품 입력값을 비우고, 사용자가 넣은 원래 URL을 링크 칸에 바로 채운다
+  useEffect(() => {
+    setTarget(link);
+    setResult(null);
+    setDraft(null);
+    setUrl(link?.url ?? "");
+  }, [link]);
 
   useEffect(() => {
     if (!target) return;
-    let alive = true;
+    const controller = new AbortController();
     setResult(null);
-    crawlProduct(target).then((r) => {
-      if (!alive) return;
+    crawlProduct(target, controller.signal).then((r) => {
+      if (controller.signal.aborted) return;
       setResult(r);
-      setDraft(r.product);
+      // 다시 시도가 또 실패해도 사용자가 이미 입력한 상품명·가격·사진은 지우지 않는다
+      setDraft((prev) =>
+        r.ok || !prev
+          ? r.product
+          : {
+              ...r.product,
+              name: r.product.name || prev.name,
+              price: r.product.price || prev.price,
+              ...(r.product.imageUrl ? {} : { imageUrl: prev.imageUrl, emoji: prev.emoji, bg: prev.bg }),
+            },
+      );
       setUrl(target.url);
     });
-    return () => {
-      alive = false;
-    };
+    // 시트를 닫거나 다시 시도하면 진행 중인 크롤링 요청을 끊는다
+    return () => controller.abort();
   }, [target]);
 
   if (!link) return null;
@@ -128,13 +144,13 @@ export function LinkImportSheet({
               value={draft.name}
               maxLength={60}
               onChange={(e) => set({ name: e.target.value })}
-              placeholder="예) 구찌 오피디아 스몰 토트백"
+              placeholder="예) 아이패드 에어 11 M2 Wi-Fi 128GB"
               className={inputClass}
             />
           </FormField>
           <FormField label="목표 금액">
             <PriceInput value={draft.price} onChange={(price) => set({ price })} />
-            <p className="mt-1.5 text-[12px] text-grey-500">쇼핑몰에 표시된 판매 가격을 입력해 주세요</p>
+            <p className="mt-1.5 text-[12px] text-grey-500">쇼핑몰 판매가 또는 희망 가격을 입력해 주세요</p>
           </FormField>
           <FormField label="대표 사진">
             <ImagePicker product={draft} onChange={set} defaultOpen className="!mt-0" />
@@ -151,11 +167,13 @@ export function LinkImportSheet({
 /* ------------------------------ 크롤링 실패 안내 ------------------------------ */
 
 function CrawlFailNotice({ code, status, onRetry }: { code: keyof typeof CRAWL_ERROR_TEXT; status?: number; onRetry: () => void }) {
+  // 차단·무응답은 대부분 쇼핑몰 보안 정책(봇 차단) 때문
+  const security = code === "blocked" || code === "timeout";
   return (
     <div className="mt-4 rounded-2xl bg-toss-orange-light p-4">
       <p className="flex items-start gap-2 text-[15px] font-bold leading-snug text-grey-900">
         <AlertCircle size={18} className="mt-0.5 shrink-0 text-toss-orange" />
-        상품 정보를 자동으로 가져오지 못했어요. 직접 입력해 주세요
+        {security ? "보안 정책으로 정보를 자동으로 불러오지 못했어요." : "정보를 자동으로 불러오지 못했어요."} 상품명과 금액을 입력해 주세요.
       </p>
       <div className="mt-1.5 flex items-center justify-between gap-2 pl-[26px] text-[13px] text-grey-600">
         <span>
@@ -244,19 +262,21 @@ function ImagePicker({
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const replaceImage = (patch: Partial<Product>) => {
-    if (product.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(product.imageUrl);
-    onChange(patch);
-  };
+  const replaceImage = (patch: Partial<Product>) => onChange(patch);
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) return setError("이미지 파일만 올릴 수 있어요");
     if (file.size > MAX_IMAGE_MB * 1024 * 1024) return setError(`${MAX_IMAGE_MB}MB 이하 사진만 올릴 수 있어요`);
     setError(null);
-    replaceImage({ imageUrl: URL.createObjectURL(file) });
+    try {
+      // blob: 주소는 탭·화면이 바뀌면 깨질 수 있어 data URL로 저장
+      replaceImage({ imageUrl: await fileToDataUrl(file) });
+    } catch {
+      setError("사진을 읽지 못했어요. 다른 사진을 골라주세요");
+    }
   };
 
   return (

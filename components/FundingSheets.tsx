@@ -272,16 +272,20 @@ export function ShareSheet({ open, funding, onClose, onCopied }: { open: boolean
   );
 }
 
+export type ShareTarget = "kakao" | "toss" | "copy";
+
 /** 카카오톡 / 토스 친구 / 링크 복사 공유 버튼 3종 */
-export function ShareTargets({ onPick }: { onPick: () => void }) {
+export function ShareTargets({ onPick }: { onPick: (target: ShareTarget) => void }) {
   return (
     <div className="mt-6 grid grid-cols-3 gap-3 pb-4">
-      {[
-        { label: "카카오톡", icon: <MessageCircle size={24} className="fill-[#3A1D1D] text-[#3A1D1D]" />, bg: "#FEE500" },
-        { label: "토스 친구", icon: <Send size={22} className="text-white" />, bg: "#0064FF" },
-        { label: "링크 복사", icon: <Copy size={22} className="text-grey-700" />, bg: "#F2F4F6" },
-      ].map((s) => (
-        <button key={s.label} onClick={onPick} className="flex flex-col items-center gap-2 rounded-2xl py-2 active:bg-grey-50">
+      {(
+        [
+          { target: "kakao", label: "카카오톡", icon: <MessageCircle size={24} className="fill-[#3A1D1D] text-[#3A1D1D]" />, bg: "#FEE500" },
+          { target: "toss", label: "토스 친구", icon: <Send size={22} className="text-white" />, bg: "#0064FF" },
+          { target: "copy", label: "링크 복사", icon: <Copy size={22} className="text-grey-700" />, bg: "#F2F4F6" },
+        ] as const
+      ).map((s) => (
+        <button key={s.label} onClick={() => onPick(s.target)} className="flex flex-col items-center gap-2 rounded-2xl py-2 active:bg-grey-50">
           <span className="flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: s.bg }}>
             {s.icon}
           </span>

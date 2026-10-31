@@ -1,6 +1,6 @@
 import { percent } from "./format";
 import { PRODUCTS, buildParticipants, createFunding, sumAmount } from "./mock";
-import { SITE_URL } from "./site";
+import { linkOrigin } from "./site";
 import type { Funding, Product } from "./types";
 
 /**
@@ -56,11 +56,7 @@ export function decodeShareToken(token: string): SharePayload | null {
 
 export const fundingSharePath = (f: Funding) => `/f/${toBase64Url(JSON.stringify(toSharePayload(f)))}`;
 
-/** 브라우저에서는 현재 접속 주소, 서버에서는 SITE_URL 기준 절대 링크 */
-export function fundingShareUrl(f: Funding) {
-  const origin = typeof window !== "undefined" ? window.location.origin : SITE_URL;
-  return new URL(fundingSharePath(f), origin).toString();
-}
+export const fundingShareUrl = (f: Funding) => new URL(fundingSharePath(f), linkOrigin()).toString();
 
 export const shareTitle = (s: SharePayload) => `${s.o}님의 위시리스트 · ${s.p.name} 조각 펀딩`;
 export const shareDescription = (s: SharePayload) => `커피 한 잔 값으로 축하를 전해보세요. 현재 ${s.r}% 달성 중!`;
@@ -106,19 +102,28 @@ export async function copyText(text: string) {
   }
 }
 
-/** 모바일 네이티브 공유 시트를 우선 호출하고, 지원하지 않으면 링크를 복사한다 */
-export async function shareFunding(f: Funding): Promise<"shared" | "cancelled" | "copied" | "failed"> {
-  const s = toSharePayload(f);
-  const url = fundingShareUrl(f);
-  const data: ShareData = { title: shareTitle(s), text: shareDescription(s), url };
+export type ShareOutcome = "shared" | "cancelled" | "copied" | "failed";
+
+/**
+ * 모바일 네이티브 공유 시트(카카오톡 등 메신저)를 우선 호출하고, 지원하지 않으면 fallbackText를 복사한다.
+ * 메신저로 보낼 때만 안내 문구를 함께 담고, 단순 '링크 복사'에는 copyText(url)를 쓴다
+ */
+export async function shareOrCopy(data: ShareData, fallbackText: string): Promise<ShareOutcome> {
   if (typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare(data))) {
     try {
       await navigator.share(data);
       return "shared";
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return "cancelled";
-      // 권한 거부 등은 링크 복사로 대체
+      // 권한 거부 등은 복사로 대체
     }
   }
-  return (await copyText(url)) ? "copied" : "failed";
+  return (await copyText(fallbackText)) ? "copied" : "failed";
+}
+
+/** 펀딩 공유: 공유 시트에는 제목·설명·링크를, 미지원 환경에서는 링크만 복사 */
+export function shareFunding(f: Funding) {
+  const s = toSharePayload(f);
+  const url = fundingShareUrl(f);
+  return shareOrCopy({ title: shareTitle(s), text: shareDescription(s), url }, url);
 }

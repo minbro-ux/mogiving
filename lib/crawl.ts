@@ -19,34 +19,8 @@ const MALLS: [RegExp, string][] = [
   [/dior\.com$/, "디올"],
 ];
 
-/** 봇 차단(WAF)으로 메타데이터 크롤링이 막히는 명품/보안 사이트 */
-const BLOCKED_MALLS = new Set(["구찌", "루이비통", "에르메스", "샤넬", "프라다", "디올"]);
-
-/** 크롤링 응답을 기다리는 최대 시간 */
+/** 서버 크롤러(/api/crawl) 응답을 기다리는 최대 시간 (서버 자체 제한 3초 + 왕복 여유) */
 const CRAWL_TIMEOUT_MS = 4000;
-
-export const EXAMPLE_LINKS = [
-  { mall: "쿠팡", url: "https://www.coupang.com/vp/products/7334512" },
-  { mall: "무신사", url: "https://www.musinsa.com/products/3912455" },
-  { mall: "29CM", url: "https://www.29cm.co.kr/products/2287741" },
-  { mall: "구찌", url: "https://www.gucci.com/kr/ko/pr/women/handbags/ophidia-small-tote-p-547551" },
-];
-
-/** 쇼핑몰별 더미 크롤링 결과 */
-const PRESETS: Record<string, Pick<Product, "brand" | "name" | "price" | "emoji" | "bg">[]> = {
-  쿠팡: [
-    { brand: "Philips", name: "필립스 소닉케어 다이아몬드클린 9000 전동칫솔", price: 289000, emoji: "🪥", bg: "#EAF4FB" },
-    { brand: "LG", name: "LG 스탠바이미 Go 27인치 포터블 스크린", price: 1090000, emoji: "📺", bg: "#EEF0F4" },
-  ],
-  무신사: [
-    { brand: "adidas", name: "아디다스 삼바 OG 클라우드 화이트", price: 139000, emoji: "👟", bg: "#F1F1F1" },
-    { brand: "Carhartt WIP", name: "칼하트 WIP 디트로이트 재킷 블랙", price: 329000, emoji: "🧥", bg: "#EFEDEA" },
-  ],
-  "29CM": [
-    { brand: "Le Labo", name: "르라보 상탈 33 오 드 퍼퓸 50ml", price: 298000, emoji: "🧴", bg: "#F4EFE8" },
-    { brand: "Marhen.J", name: "마르헨제이 리커버 백 크림", price: 89000, emoji: "👜", bg: "#F6EFEA" },
-  ],
-};
 
 export type ParsedLink = { url: string; mall: string | null };
 
@@ -85,67 +59,73 @@ export const CRAWL_ERROR_TEXT: Record<CrawlErrorCode, string> = {
   network: "네트워크 오류로 페이지를 열지 못했어요",
 };
 
-/** og:title / product:price 등에서 뽑아낸 원본 메타데이터 (일부만 있을 수 있음) */
-type RawMeta = Partial<Pick<Product, "brand" | "name" | "price" | "emoji" | "bg" | "imageUrl">>;
+/** og:title / og:image / product:price 등에서 뽑아낸 원본 메타데이터 (일부만 있을 수 있음) */
+export type RawMeta = Partial<Pick<Product, "brand" | "name" | "price" | "imageUrl">> & { siteName?: string };
 
-/**
- * 서버 크롤러 호출을 흉내내는 더미 (네트워크 호출 없음).
- * 실제처럼 403 에러를 던지거나, 응답이 오지 않거나, 메타 태그가 비어 있을 수 있다.
- */
-function fetchMeta(url: string, mall: string | null): Promise<RawMeta> {
-  return new Promise((resolve, reject) => {
-    if (/timeout/i.test(url)) return; // 응답 없음 → 타임아웃으로 처리
-    setTimeout(() => {
-      if (mall && BLOCKED_MALLS.has(mall)) return reject(new CrawlError("blocked", "403 Forbidden", 403));
-      const pool = mall ? PRESETS[mall] : undefined;
-      if (!pool) return resolve({}); // 지원하지 않는 쇼핑몰: 상품 메타 태그 없음
-      const hash = [...url].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
-      resolve(pool[hash % pool.length]);
-    }, 1100);
-  });
+/** /api/crawl 응답 */
+export type CrawlResponse = { ok: true; meta: RawMeta } | { ok: false; code: CrawlErrorCode; status?: number };
+
+/** 서버 라우트가 실제 상품 페이지 HTML을 받아 OG·JSON-LD 메타 태그를 파싱한다 (브라우저는 CORS로 직접 못 읽음) */
+async function fetchMeta(url: string, signal: AbortSignal): Promise<RawMeta> {
+  let body: CrawlResponse;
+  try {
+    const res = await fetch(`/api/crawl?url=${encodeURIComponent(url)}`, { signal });
+    body = (await res.json()) as CrawlResponse;
+  } catch {
+    if (signal.aborted) throw new CrawlError("timeout", `${CRAWL_TIMEOUT_MS}ms timeout`);
+    throw new CrawlError("network", "crawl api unreachable");
+  }
+  if (!body.ok) throw new CrawlError(body.code, `crawl failed: ${body.code}`, body.status);
+  return body.meta;
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new CrawlError("timeout", `${ms}ms timeout`)), ms);
-    p.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      },
-    );
-  });
+/** "상품명 | 쇼핑몰" 처럼 제목 끝에 붙은 사이트 이름을 걷어낸다 */
+function cleanTitle(title: string | undefined, siteNames: (string | null | undefined)[]) {
+  let t = title?.trim() ?? "";
+  for (const site of siteNames) {
+    if (!site) continue;
+    const esc = site.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    t = t.replace(new RegExp(`\\s*[|\\-–:·]\\s*${esc}\\s*$`, "i"), "").trim();
+  }
+  return t;
 }
 
 export type CrawlResult =
   | { ok: true; product: Product }
-  /** 실패해도 크래시 없이, 부분적으로 파싱된 값을 담은 수동 입력용 초기값을 돌려준다 */
+  /** 실패해도 가짜 상품을 채우지 않고, 실제로 파싱된 값만 담은 수동 입력용 초기값을 돌려준다 */
   | { ok: false; product: Product; error: { code: CrawlErrorCode; status?: number } };
 
-/** 링크에서 상품 정보를 가져온다. 어떤 실패도 throw하지 않고 수동 입력 모드용 결과로 바꾼다 */
-export async function crawlProduct({ url, mall }: ParsedLink): Promise<CrawlResult> {
+/**
+ * 링크에서 상품 정보를 가져온다. 어떤 실패도 throw하지 않고 수동 입력 모드용 결과로 바꾼다.
+ * 4초 안에 응답이 없으면 요청 자체를 끊고(AbortController) 바로 실패로 돌려준다.
+ * signal: 시트를 닫거나 링크를 바꿔 결과가 더 필요 없을 때 진행 중인 요청을 취소
+ */
+export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSignal): Promise<CrawlResult> {
   let meta: RawMeta = {};
   let error: { code: CrawlErrorCode; status?: number } | null = null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CRAWL_TIMEOUT_MS);
+  const cancel = () => controller.abort();
+  signal?.addEventListener("abort", cancel);
   try {
-    meta = await withTimeout(fetchMeta(url, mall), CRAWL_TIMEOUT_MS);
+    meta = await fetchMeta(url, controller.signal);
   } catch (e) {
     error = e instanceof CrawlError ? { code: e.code, status: e.status } : { code: "network" };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
   }
 
   const product: Product = {
     id: `link-${Date.now()}`,
-    brand: meta.brand ?? (mall && BLOCKED_MALLS.has(mall) ? mall : ""),
-    name: meta.name?.trim() ?? "",
+    brand: meta.brand?.trim() ?? "",
+    name: cleanTitle(meta.name, [meta.siteName, mall]),
     price: meta.price && meta.price > 0 ? meta.price : 0,
-    emoji: meta.emoji ?? "🎁",
-    bg: meta.bg ?? "#EEF3FF",
-    imageUrl: meta.imageUrl,
+    emoji: "🎁",
+    bg: "#EEF3FF",
+    imageUrl: meta.imageUrl && /^https?:\/\//.test(meta.imageUrl) ? meta.imageUrl : undefined,
     category: "링크",
-    mall: mall ?? "기타 쇼핑몰",
+    mall: mall ?? meta.siteName ?? "기타 쇼핑몰",
     url,
   };
 
