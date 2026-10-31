@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Copy, Link2, Lock, MessageCircle, Minus, Plus, Send } from "lucide-react";
 import { shortWon, won } from "@/lib/format";
 import { pieceInfo, piecesAmount } from "@/lib/pieces";
+import { copyText, fundingShareUrl } from "@/lib/share";
 import type { Funding, Participant } from "@/lib/types";
 import { BottomSheet, Button, PieceGrid, ProductThumb, Segmented, Spinner } from "./ui";
 
@@ -250,14 +251,10 @@ function StepButton({ label, disabled, onClick, children }: { label: string; dis
 /* --------------------------------- 공유 시트 --------------------------------- */
 
 export function ShareSheet({ open, funding, onClose, onCopied }: { open: boolean; funding: Funding; onClose: () => void; onCopied: () => void }) {
-  const link = `https://mogiving.toss.im/f/${funding.id.slice(-6)}`;
+  const link = fundingShareUrl(funding);
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-    } catch {
-      /* 웹뷰 등 클립보드 권한이 없는 환경 */
-    }
+    await copyText(link);
     onCopied();
   };
 
