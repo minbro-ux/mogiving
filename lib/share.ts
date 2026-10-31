@@ -1,7 +1,7 @@
 import { percent } from "./format";
 import { PRODUCTS, buildParticipants, createFunding, sumAmount } from "./mock";
 import { linkOrigin } from "./site";
-import type { Funding, Product } from "./types";
+import type { Funding, Product, ShippingAddress } from "./types";
 
 /**
  * 공유 링크로 전달하는 펀딩 요약. 크롤러(OG)와 친구 화면 모두 여기서 복원한다.
@@ -17,7 +17,7 @@ export type SharePayload = {
   r: number;
   /** 마감 시각 */
   d: number;
-  p: Pick<Product, "id" | "brand" | "name" | "price" | "emoji" | "bg" | "category" | "mall"> & { img?: string };
+  p: Pick<Product, "id" | "brand" | "name" | "price" | "emoji" | "bg" | "category" | "mall"> & { img?: string; opt?: string };
 };
 
 const toBase64Url = (s: string) => {
@@ -32,7 +32,7 @@ const fromBase64Url = (t: string) => {
 };
 
 export function toSharePayload(f: Funding): SharePayload {
-  const { id, brand, name, price, emoji, bg, category, mall, imageUrl } = f.product;
+  const { id, brand, name, price, emoji, bg, category, mall, imageUrl, option } = f.product;
   return {
     id: f.id,
     o: f.ownerName,
@@ -40,8 +40,43 @@ export function toSharePayload(f: Funding): SharePayload {
     r: Math.min(100, percent(sumAmount(f.participants), f.goal)),
     d: f.deadline,
     // blob: 등 로컬 이미지는 외부에서 열 수 없으므로 공개 주소만 담는다
-    p: { id, brand, name, price, emoji, bg, category, mall, img: imageUrl && /^https?:\/\//.test(imageUrl) ? imageUrl : undefined },
+    p: { id, brand, name, price, emoji, bg, category, mall, img: imageUrl && /^https?:\/\//.test(imageUrl) ? imageUrl : undefined, opt: option || undefined },
   };
+}
+
+const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : undefined);
+
+/**
+ * 공개해도 되는 필드만 골라 새 객체로 만든다 (화이트리스트).
+ * 저장소에 함께 보관된 배송지(shipping) 등 비공개 값이 친구 화면·OG로 새지 않게, 읽어올 때 항상 거친다
+ */
+export function publicPayload(s: SharePayload): SharePayload {
+  const p = s.p;
+  return {
+    id: s.id.slice(0, 64),
+    o: s.o.slice(0, 40),
+    t: s.t.slice(0, 80),
+    r: Math.max(0, Math.min(100, Math.round(s.r))),
+    d: s.d,
+    p: {
+      id: str(p.id, 64) ?? "",
+      brand: str(p.brand, 60) ?? "",
+      name: p.name.slice(0, 120),
+      price: p.price,
+      emoji: str(p.emoji, 8) ?? "🎁",
+      bg: str(p.bg, 16) ?? "#EEF3FF",
+      category: str(p.category, 30) ?? "링크",
+      mall: str(p.mall, 40) ?? "",
+      img: typeof p.img === "string" && /^https?:\/\//.test(p.img) ? p.img.slice(0, 2000) : undefined,
+      opt: str(p.opt, 40),
+    },
+  };
+}
+
+export function isShippingAddress(v: unknown): v is ShippingAddress {
+  const a = v as ShippingAddress | null;
+  const ok = (x: unknown, max: number) => typeof x === "string" && x.length <= max;
+  return !!a && ok(a.name, 20) && ok(a.phone, 20) && ok(a.address, 100) && ok(a.detail, 60) && (a.memo === undefined || ok(a.memo, 60));
 }
 
 export function isSharePayload(v: unknown): v is SharePayload {
@@ -60,7 +95,7 @@ export function isSharePayload(v: unknown): v is SharePayload {
 export function decodeShareToken(token: string): SharePayload | null {
   try {
     const v: unknown = JSON.parse(fromBase64Url(decodeURIComponent(token)));
-    return isSharePayload(v) ? v : null;
+    return isSharePayload(v) ? publicPayload(v) : null;
   } catch {
     return null;
   }
@@ -84,7 +119,8 @@ export async function registerShortLink(f: Funding, prev?: ShortLink | null): Pr
     const res = await fetch("/api/share", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: toSharePayload(f), prev: prev?.key ? prev : undefined }),
+      // 배송지는 공개 payload와 분리해 보낸다 (서버에만 보관, 링크·친구 화면에는 나가지 않음)
+      body: JSON.stringify({ payload: toSharePayload(f), shipping: f.shipping, prev: prev?.key ? prev : undefined }),
     });
     if (!res.ok) return null;
     const v = (await res.json()) as { id?: unknown; key?: unknown };
@@ -100,8 +136,8 @@ export const shareDescription = (s: SharePayload) => `커피 한 잔 값으로 �
 /** 공유 링크로 들어온 친구 화면용 펀딩 복원 (참여 내역은 달성률에 맞춘 데모 데이터) */
 export function fundingFromShare(s: SharePayload): Funding {
   const curated = PRODUCTS.find((p) => p.id === s.p.id);
-  const { img, ...rest } = s.p;
-  const product: Product = curated ?? { ...rest, imageUrl: img };
+  const { img, opt, ...rest } = s.p;
+  const product: Product = { ...(curated ?? { ...rest, imageUrl: img }), option: opt };
   const base = createFunding(product, { title: s.t });
   const raised = Math.round((base.goal * s.r) / 100 / 1000) * 1000;
   const chunks = raised > 0 ? Math.max(1, Math.ceil(s.r / 15)) : 0;

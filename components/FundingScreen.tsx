@@ -5,7 +5,7 @@ import { Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, EyeOff, Lock,
 import { dDay, percent, shortWon, timeAgo, won } from "@/lib/format";
 import { sumAmount } from "@/lib/mock";
 import { pieceInfo } from "@/lib/pieces";
-import type { Funding, GiftReason, Participant, Resolution } from "@/lib/types";
+import type { Funding, GiftReason, Participant, Resolution, ShippingAddress } from "@/lib/types";
 import { NextWishSheet } from "./ShopScreen";
 import { StakeCardSheet, StakeMapSheet } from "./StakeMap";
 import { Badge, BottomCTA, Button, PieceGrid, ProductThumb, ProgressBar, Segmented, Switch } from "./ui";
@@ -91,11 +91,19 @@ export function FundingScreen({
               {product.mall} · {product.brand}
             </p>
             <p className="mt-0.5 line-clamp-2 text-[15px] font-medium leading-snug text-grey-800">{product.name}</p>
+            {product.option && (
+              <p className="mt-1 inline-flex max-w-full rounded-md bg-white px-1.5 py-0.5 text-[12px] font-medium text-grey-600 ring-1 ring-grey-200">
+                <span className="truncate">옵션 · {product.option}</span>
+              </p>
+            )}
             <p className="mt-1.5 text-[13px] text-grey-500">
               목표 금액 <b className="text-[15px] text-grey-900">{won(funding.goal)}</b>
             </p>
           </div>
         </div>
+
+        {/* 배송지: 주최자 본인 화면에만 (친구 시점·공유 링크에는 데이터 자체가 없음) */}
+        {isOwner && funding.shipping && <ShippingCard shipping={funding.shipping} />}
 
         {hasStakes && (
           <button
@@ -347,6 +355,28 @@ function AmountSummary({ participants }: { participants: Participant[] }) {
 }
 
 /* --------------------------------- 상태 카드 --------------------------------- */
+
+function ShippingCard({ shipping: s }: { shipping: ShippingAddress }) {
+  return (
+    <div className="mt-3 rounded-2xl border border-grey-200 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-1 text-[14px] font-semibold text-grey-800">
+          <MapPin size={15} /> 선물 받을 배송지
+        </p>
+        <span className="flex items-center gap-1 text-[12px] text-grey-500">
+          <Lock size={12} /> 나만 볼 수 있어요
+        </span>
+      </div>
+      <p className="mt-1.5 text-[14px] text-grey-800">
+        {s.name} · {s.phone}
+      </p>
+      <p className="mt-0.5 text-[13px] leading-snug text-grey-600">
+        {s.address} {s.detail}
+      </p>
+      {s.memo && <p className="mt-0.5 text-[12px] text-grey-500">메모: {s.memo}</p>}
+    </div>
+  );
+}
 
 function StatusCard({ funding, raised, isOwner, onResolve }: { funding: Funding; raised: number; isOwner: boolean; onResolve: () => void }) {
   const { phase, resolution } = funding;

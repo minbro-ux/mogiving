@@ -45,11 +45,16 @@ export function buildParticipants(amounts: number[]): Participant[] {
 
 export const sumAmount = (ps: Participant[]) => ps.reduce((s, p) => s + p.amount, 0);
 
-export function createFunding(product: Product, opts?: { title?: string; message?: string; days?: number; round?: number }): Funding {
+export function createFunding(
+  product: Product,
+  opts?: { title?: string; message?: string; days?: number; round?: number; option?: string; shipping?: ShippingAddress },
+): Funding {
   const round = opts?.round ?? 1;
+  const option = opts?.option?.trim();
   return {
     id: `f-${Date.now()}`,
-    product,
+    product: option ? { ...product, option } : product,
+    ...(opts?.shipping ? { shipping: opts.shipping } : {}),
     goal: product.price,
     title: opts?.title || (round > 1 ? `내 생일 선물 펀딩 ${round}탄` : "내 생일 선물 펀딩"),
     ownerName: "김토스",

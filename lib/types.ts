@@ -11,6 +11,8 @@ export type Product = {
   mall: string;
   /** 원본 상품 링크 */
   url?: string;
+  /** 선택한 옵션 (색상 / 사이즈 / 용량 등). 친구 화면에도 보인다 */
+  option?: string;
   /** 사용자가 올린 상품 이미지 (없으면 emoji 썸네일) */
   imageUrl?: string;
   /** 운영자 추천 큐레이션 상품 여부 */
@@ -34,6 +36,8 @@ export type ShippingAddress = {
   phone: string;
   address: string;
   detail: string;
+  /** 배송 메모 (부재 시 문 앞 등) */
+  memo?: string;
 };
 
 /**
@@ -80,4 +84,6 @@ export type Funding = {
   resolution?: Resolution;
   /** 몇 번째 모금함인지 (1차 완판 후 2탄, 3탄 …) */
   round: number;
+  /** 주최자가 등록한 선물 수령 배송지. 주최자 화면·서버에만 두고 공유 링크·친구 화면에는 절대 담지 않는다 */
+  shipping?: ShippingAddress;
 };

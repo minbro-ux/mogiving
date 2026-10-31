@@ -35,14 +35,16 @@ export function ResolutionSheet({
   const firstStep: Step = achieved ? "address" : "choose";
 
   const [step, setStep] = useState<Step>(firstStep);
-  const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
+  // 펀딩 등록 때 입력한 배송지가 있으면 미리 채워 둔다
+  const initialAddress = funding.shipping ?? EMPTY_ADDRESS;
+  const [address, setAddress] = useState<ShippingAddress>(initialAddress);
   const [processingText, setProcessingText] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setStep(firstStep);
-    setAddress(EMPTY_ADDRESS);
-  }, [open, firstStep]);
+    setAddress(initialAddress);
+  }, [open, firstStep, initialAddress]);
 
   const commit = (r: Resolution, text: string) => {
     setProcessingText(text);
@@ -232,6 +234,7 @@ function ProductRow({ product }: { product: Product }) {
         <p className="line-clamp-1 text-[15px] text-grey-800">{product.name}</p>
         <p className="text-[13px] text-grey-500">
           {product.mall} · {won(product.price)}
+          {product.option && ` · 옵션 ${product.option}`}
         </p>
       </div>
     </div>

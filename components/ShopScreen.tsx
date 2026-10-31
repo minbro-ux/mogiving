@@ -6,7 +6,7 @@ import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
 import { type ParsedLink, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
-import { PeriodPicker, SafetyNote } from "./FundingForm";
+import { EMPTY_SHIPPING, OptionField, PeriodPicker, SafetyNote, ShippingFields, shippingStatus, toShipping } from "./FundingForm";
 import { LinkImportSheet } from "./LinkImportSheet";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 import { WishRequestSheet } from "./WishRequestSheet";
@@ -275,6 +275,8 @@ function ProductCard({ product: p, onClick }: { product: Product; onClick: () =>
 
 function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | null; onClose: () => void; onCreate: (f: Funding) => void }) {
   const [days, setDays] = useState(7);
+  const [option, setOption] = useState("");
+  const [shipping, setShipping] = useState(EMPTY_SHIPPING);
   if (!p) return null;
   const rate = discountRate(p.price, p.originalPrice);
   return (
@@ -282,7 +284,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
       open
       onClose={onClose}
       footer={
-        <Button onClick={() => onCreate(createFunding(p, { days }))}>
+        <Button disabled={shippingStatus(shipping) === "partial"} onClick={() => onCreate(createFunding(p, { days, option, shipping: toShipping(shipping) }))}>
           <Gift size={20} /> 이 추천 상품으로 펀딩 열기
         </Button>
       }
@@ -301,7 +303,9 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
         <span className="text-[22px] font-bold text-grey-900">{won(p.price)}</span>
         {p.originalPrice && <span className="text-[15px] text-grey-400 line-through">{won(p.originalPrice)}</span>}
       </div>
+      <OptionField value={option} onChange={setOption} />
       <PeriodPicker value={days} onChange={setDays} />
+      <ShippingFields value={shipping} onChange={setShipping} />
       <SafetyNote />
     </BottomSheet>
   );

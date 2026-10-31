@@ -1,13 +1,20 @@
 import { createHash, randomBytes } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
-import type { SharePayload } from "./share";
+import { type SharePayload, publicPayload } from "./share";
+import type { ShippingAddress } from "./types";
 
 /**
  * 짧은 공유 링크(/f/[shortId]) 저장소.
  * SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY가 있으면 Supabase mogiving_shares 테이블(서버 전용)을 쓰고,
  * 없으면 로컬 개발용 JSON 파일(.data/shares.json)로 대체한다.
+ *
+ * 저장 형태: payload = 공개 요약 + shipping(주최자 배송지).
+ * shipping은 서버에만 보관하며, getShare는 publicPayload로 공개 필드만 골라 돌려준다.
  */
+
+/** DB에 저장되는 payload (공개 요약 + 비공개 배송지) */
+type StoredPayload = SharePayload & { shipping?: ShippingAddress };
 
 /** 헷갈리는 문자(0/O, 1/l/I)를 뺀 base56 */
 const ALPHABET = "23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -21,10 +28,10 @@ export type ShortLink = { id: string; key: string };
 
 interface ShareStore {
   /** prev의 key가 맞으면 내용만 갱신하고 true */
-  update(prev: ShortLink, payload: SharePayload): Promise<boolean>;
+  update(prev: ShortLink, payload: StoredPayload): Promise<boolean>;
   /** 새 id로 저장. id가 이미 있으면 false (호출 측에서 다른 id로 재시도) */
-  insert(id: string, keyHash: string, payload: SharePayload): Promise<boolean>;
-  get(id: string): Promise<SharePayload | null>;
+  insert(id: string, keyHash: string, payload: StoredPayload): Promise<boolean>;
+  get(id: string): Promise<StoredPayload | null>;
 }
 
 /* ------------------------------ Supabase (배포용) ------------------------------ */
@@ -56,7 +63,7 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
     async get(id) {
       const res = await call(`?id=eq.${encodeURIComponent(id)}&select=payload`, { method: "GET" });
       if (!res.ok) throw new Error(`supabase get ${res.status}`);
-      const rows = (await res.json()) as { payload: SharePayload }[];
+      const rows = (await res.json()) as { payload: StoredPayload }[];
       return rows[0]?.payload ?? null;
     },
   };
@@ -64,7 +71,7 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
 
 /* ------------------------------ 로컬 파일 (개발용) ------------------------------ */
 
-type FileEntry = { keyHash: string; payload: SharePayload; updatedAt: number };
+type FileEntry = { keyHash: string; payload: StoredPayload; updatedAt: number };
 
 function fileStore(): ShareStore {
   const file = path.join(process.env.SHARE_STORE_DIR ?? path.join(process.cwd(), ".data"), "shares.json");
@@ -119,22 +126,25 @@ function exclusive<T>(fn: () => Promise<T>): Promise<T> {
  * 펀딩 요약을 저장하고 짧은 id를 돌려준다.
  * prev(id + 비밀 key)가 맞으면 같은 id의 내용(달성률 등)만 갱신해 링크가 바뀌지 않게 한다.
  */
-export function saveShare(payload: SharePayload, prev?: ShortLink): Promise<ShortLink> {
+export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: ShippingAddress): Promise<ShortLink> {
+  const stored: StoredPayload = { ...publicPayload(payload), ...(shipping ? { shipping } : {}) };
   return exclusive(async () => {
-    if (prev && SHORT_ID_RE.test(prev.id) && (await store.update(prev, payload))) return prev;
+    if (prev && SHORT_ID_RE.test(prev.id) && (await store.update(prev, stored))) return prev;
     const key = randomCode(24);
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = randomCode(ID_LENGTH);
-      if (await store.insert(id, hashKey(key), payload)) return { id, key };
+      if (await store.insert(id, hashKey(key), stored)) return { id, key };
     }
     throw new Error("could not allocate short id");
   });
 }
 
+/** 공개 요약만 돌려준다. 배송지는 절대 포함되지 않는다 */
 export async function getShare(id: string): Promise<SharePayload | null> {
   if (!SHORT_ID_RE.test(id)) return null;
   try {
-    return await store.get(id);
+    const stored = await store.get(id);
+    return stored ? publicPayload(stored) : null;
   } catch {
     return null;
   }
