@@ -30,11 +30,14 @@ const MAX_IMAGE_MB = 10;
  */
 export function LinkImportSheet({
   link,
+  prefetched,
   round,
   onClose,
   onCreate,
 }: {
   link: ParsedLink | null;
+  /** 입력창 미리보기에서 이미 불러온 결과. 같은 링크면 다시 크롤링하지 않는다 */
+  prefetched?: CrawlResult | null;
   round?: number;
   onClose: () => void;
   onCreate: (f: Funding) => void;
@@ -46,6 +49,8 @@ export function LinkImportSheet({
   const [days, setDays] = useState(7);
   const [option, setOption] = useState("");
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
+  const prefetchedRef = useRef(prefetched);
+  prefetchedRef.current = prefetched;
 
   // 새 링크가 들어오면 이전 상품 입력값을 비우고, 사용자가 넣은 원래 URL을 링크 칸에 바로 채운다
   useEffect(() => {
@@ -61,7 +66,10 @@ export function LinkImportSheet({
     if (!target) return;
     const controller = new AbortController();
     setResult(null);
-    crawlProduct(target, controller.signal).then((r) => {
+    // 미리보기 결과는 처음 한 번만 재사용하고, '다시 시도'는 항상 새로 불러온다
+    const cached = prefetchedRef.current?.product.url === target.url ? prefetchedRef.current : null;
+    prefetchedRef.current = null;
+    (cached ? Promise.resolve(cached) : crawlProduct(target, controller.signal)).then((r) => {
       if (controller.signal.aborted) return;
       setResult(r);
       // 다시 시도가 또 실패해도 사용자가 이미 입력한 상품명·가격·사진은 지우지 않는다

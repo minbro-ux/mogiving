@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** 리다이렉트·모바일 재시도까지 포함한 전체 크롤링 제한 시간 (구찌·쿠팡 등이 응답을 붙잡아 두는 경우 대비) */
-const DEADLINE_MS = 3000;
+const DEADLINE_MS = 4000;
 const MAX_REDIRECTS = 8;
 const MAX_BYTES = 3 * 1024 * 1024;
 /** 본문 이미지 중 이 크기(px) 이상으로 선언된 것을 '큰 이미지'로 본다 */
@@ -39,8 +39,8 @@ const BROWSERS = [
   },
 ];
 
-/** 봇 차단·보안 정책으로 보는 응답 코드 */
-const BLOCKED_STATUS = [401, 403, 429, 503];
+/** 봇 차단·보안 정책으로 보는 응답 코드 (490: 네이버 비정상 접근 차단) */
+const BLOCKED_STATUS = [401, 403, 429, 490, 503];
 
 const fail = (code: CrawlErrorCode, status?: number) => NextResponse.json<CrawlResponse>({ ok: false, code, status });
 
@@ -235,10 +235,13 @@ function extractMeta(html: string, pageUrl: URL): RawMeta {
     price:
       parsePrice(pick("product:price:amount", "og:price:amount", "product:sale_price:amount", "price")) ??
       parsePrice(offers?.price) ??
-      parsePrice(offers?.lowPrice),
+      parsePrice(offers?.lowPrice) ??
+      // 카카오 선물하기 등은 가격을 og:description("… 20,000원")에만 넣는다
+      parsePrice(/(\d{1,3}(?:,\d{3})+)\s*원/.exec(pick("og:description", "description") ?? "")?.[1]),
     imageUrl,
     brand: pick("product:brand", "og:brand", "brand") ?? (typeof ldBrand === "string" ? ldBrand : typeof (ldBrand as LdNode)?.name === "string" ? ((ldBrand as LdNode).name as string) : undefined),
     siteName: pick("og:site_name"),
+    description: pick("og:description", "twitter:description", "description") ?? (typeof ld?.description === "string" ? decodeEntities(ld.description) : undefined),
   };
 }
 
@@ -282,25 +285,27 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** 데스크톱 크롬으로 먼저 시도하고, 차단되거나 상품 정보가 비면 남은 시간 안에서 모바일 크롬으로 한 번 더 */
+const META_KEYS = ["name", "price", "imageUrl", "brand", "siteName", "description"] as const;
+const isComplete = (m: RawMeta) => !!(m.name && m.imageUrl && m.price);
+
+/** 앞선 시도의 값을 우선하고, 빈 칸만 뒤 시도의 값으로 채운다 */
+function merge(attempts: Attempt[]): Attempt {
+  const oks = attempts.filter((a): a is Extract<Attempt, { ok: true }> => a.ok);
+  if (!oks.length) return attempts.find((a) => !a.ok && a.code === "blocked") ?? attempts[0];
+  const meta: RawMeta = {};
+  for (const k of META_KEYS) {
+    const v = oks.map((a) => a.meta[k]).find((x) => x !== undefined && x !== "");
+    if (v !== undefined) (meta as Record<string, unknown>)[k] = v;
+  }
+  return { ok: true, meta };
+}
+
+/** 데스크톱 크롬으로 먼저 시도하고, 차단되거나 상품명·이미지·가격 중 빈 값이 있으면 남은 시간 안에서 모바일 크롬으로 한 번 더 */
 async function crawlWithRetry(target: URL, signal: AbortSignal): Promise<Attempt> {
   let result = await crawl(target, BROWSERS[0], signal);
-  const incomplete = result.ok && (!result.meta.name || !result.meta.imageUrl || !result.meta.price);
-  if (!signal.aborted && ((!result.ok && result.code === "blocked") || incomplete)) {
+  if (!signal.aborted && (!result.ok || !isComplete(result.meta))) {
     const mobile = await crawl(target, BROWSERS[1], signal);
-    if (mobile.ok) {
-      const prev = result.ok ? result.meta : {};
-      result = {
-        ok: true,
-        meta: {
-          name: prev.name ?? mobile.meta.name,
-          price: prev.price ?? mobile.meta.price,
-          imageUrl: prev.imageUrl ?? mobile.meta.imageUrl,
-          brand: prev.brand ?? mobile.meta.brand,
-          siteName: prev.siteName ?? mobile.meta.siteName,
-        },
-      };
-    }
+    result = merge([result, mobile]);
   }
   return result;
 }

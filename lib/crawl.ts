@@ -7,7 +7,8 @@ const MALLS: [RegExp, string][] = [
   [/29cm\.co\.kr$/, "29CM"],
   [/kream\.co\.kr$/, "KREAM"],
   [/oliveyoung\.co\.kr$/, "올리브영"],
-  [/smartstore\.naver\.com$|shopping\.naver\.com$/, "네이버 스마트스토어"],
+  [/smartstore\.naver\.com$|brand\.naver\.com$|shopping\.naver\.com$/, "네이버 스마트스토어"],
+  [/gift\.kakao\.com$/, "카카오톡 선물하기"],
   [/ssg\.com$/, "SSG.COM"],
   [/11st\.co\.kr$/, "11번가"],
   [/wconcept\.co\.kr$/, "W컨셉"],
@@ -19,8 +20,8 @@ const MALLS: [RegExp, string][] = [
   [/dior\.com$/, "디올"],
 ];
 
-/** 서버 크롤러(/api/crawl) 응답을 기다리는 최대 시간 (서버 자체 제한 3초 + 왕복 여유) */
-const CRAWL_TIMEOUT_MS = 4000;
+/** 서버 크롤러(/api/crawl) 응답을 기다리는 최대 시간 (서버 자체 제한 4초 + 왕복 여유) */
+const CRAWL_TIMEOUT_MS = 5000;
 
 export type ParsedLink = { url: string; mall: string | null };
 
@@ -60,7 +61,7 @@ export const CRAWL_ERROR_TEXT: Record<CrawlErrorCode, string> = {
 };
 
 /** og:title / og:image / product:price 등에서 뽑아낸 원본 메타데이터 (일부만 있을 수 있음) */
-export type RawMeta = Partial<Pick<Product, "brand" | "name" | "price" | "imageUrl">> & { siteName?: string };
+export type RawMeta = Partial<Pick<Product, "brand" | "name" | "price" | "imageUrl">> & { siteName?: string; description?: string };
 
 /** /api/crawl 응답 */
 export type CrawlResponse = { ok: true; meta: RawMeta } | { ok: false; code: CrawlErrorCode; status?: number };
@@ -90,10 +91,14 @@ function cleanTitle(title: string | undefined, siteNames: (string | null | undef
   return t;
 }
 
-export type CrawlResult =
+export type CrawlResult = (
   | { ok: true; product: Product }
   /** 실패해도 가짜 상품을 채우지 않고, 실제로 파싱된 값만 담은 수동 입력용 초기값을 돌려준다 */
-  | { ok: false; product: Product; error: { code: CrawlErrorCode; status?: number } };
+  | { ok: false; product: Product; error: { code: CrawlErrorCode; status?: number } }
+) & {
+  /** og:description (미리보기 카드 보조 문구) */
+  description?: string;
+};
 
 /**
  * 링크에서 상품 정보를 가져온다. 어떤 실패도 throw하지 않고 수동 입력 모드용 결과로 바꾼다.
@@ -131,5 +136,6 @@ export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSign
 
   // 응답은 왔지만 필수 값(상품명·가격)이 비어 있으면 파싱 실패
   if (!error && (!product.name || !product.price)) error = { code: "parse" };
-  return error ? { ok: false, product, error } : { ok: true, product };
+  const description = meta.description?.trim() || undefined;
+  return error ? { ok: false, product, error, description } : { ok: true, product, description };
 }

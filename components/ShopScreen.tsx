@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ChevronLeft, ChevronRight, Gift, Link2, PackageCheck, Search, Sparkles, Star } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Gift, Link2, Loader2, PackageCheck, Pencil, Search, Sparkles, Star } from "lucide-react";
 import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
-import { type ParsedLink, parseLink } from "@/lib/crawl";
+import { type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
 import { EMPTY_SHIPPING, OptionField, PeriodPicker, SafetyNote, ShippingFields, shippingStatus, toShipping } from "./FundingForm";
@@ -16,6 +16,7 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Product | null>(null);
   const [importUrl, setImportUrl] = useState<ParsedLink | null>(null);
+  const [prefetched, setPrefetched] = useState<CrawlResult | null>(null);
   const [wishOpen, setWishOpen] = useState(false);
 
   const list = useMemo(
@@ -42,7 +43,12 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
       </header>
 
       {/* 1. 상품 링크로 위시리스트 만들기 */}
-      <LinkImportSection onImport={setImportUrl} />
+      <LinkImportSection
+        onImport={(l, r) => {
+          setPrefetched(r ?? null);
+          setImportUrl(l);
+        }}
+      />
 
       {/* 역발상 진입: 축하받을 친구에게 위시리스트 요청 */}
       <section className="px-5 pt-3">
@@ -135,6 +141,7 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
       <WishRequestSheet open={wishOpen} onClose={() => setWishOpen(false)} onCopied={onToast} />
       <LinkImportSheet
         link={importUrl}
+        prefetched={prefetched}
         onClose={() => setImportUrl(null)}
         onCreate={(f) => {
           setImportUrl(null);
@@ -147,7 +154,9 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
 
 /* -------------------------- 링크 입력 섹션 (상단) -------------------------- */
 
-function LinkImportSection({ onImport }: { onImport: (l: ParsedLink) => void }) {
+type OnImport = (l: ParsedLink, prefetched?: CrawlResult) => void;
+
+function LinkImportSection({ onImport }: { onImport: OnImport }) {
   return (
     <section className="px-5 pt-2">
       <div className="rounded-[24px] bg-toss-blue-light p-5">
@@ -156,17 +165,53 @@ function LinkImportSection({ onImport }: { onImport: (l: ParsedLink) => void }) 
           <br />
           위시리스트 만들기
         </p>
-        <p className="mt-1.5 text-[14px] text-grey-600">쿠팡, 무신사, 29CM 등 원하는 상품 링크를 붙여넣으세요</p>
+        <p className="mt-1.5 text-[14px] text-grey-600">쿠팡, 스마트스토어, 29CM, 카카오 선물하기 등 상품 링크를 붙여넣으세요</p>
         <LinkInputForm onImport={onImport} />
       </div>
     </section>
   );
 }
 
-/** 상품 링크 입력 + 붙여넣기 + 예시 링크 (메인 섹션과 2탄 모금함 시트에서 공용) */
-function LinkInputForm({ onImport }: { onImport: (l: ParsedLink) => void }) {
+/** 붙여넣기·입력이 끝난 뒤 자동으로 미리보기를 불러오기까지 기다리는 시간 */
+const AUTO_FETCH_DELAY_MS = 450;
+
+/** 타이핑 도중 "https://cou" 같은 미완성 주소로 요청하지 않도록, 도메인(.com 등)과 경로까지 들어간 주소만 자동으로 불러온다 */
+function looksComplete(v: string) {
+  const t = v.trim();
+  return /^(https?:\/\/)?[^\s/]+\.[a-z]{2,}\/\S+$/i.test(t);
+}
+
+type Preview = { link: ParsedLink; result: CrawlResult | null };
+
+/**
+ * 상품 링크 입력 + 붙여넣기 (메인 섹션과 2탄 모금함 시트에서 공용)
+ * 링크를 붙여넣거나 입력하면 서버(/api/crawl)에서 og:image·og:title을 받아 바로 아래 미리보기 카드에 보여준다.
+ * 불러오기에 실패해도 '직접 입력하기'로 상품명·사진을 손으로 채우는 시트로 이어진다.
+ */
+function LinkInputForm({ onImport }: { onImport: OnImport }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+
+  // 입력이 멈추면 자동으로 메타데이터를 불러온다. 링크가 바뀌면 이전 요청은 취소
+  useEffect(() => {
+    const parsed = looksComplete(value) ? parseLink(value) : null;
+    if (!parsed) {
+      setPreview(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setPreview({ link: parsed, result: null });
+      crawlProduct(parsed, controller.signal).then((result) => {
+        if (!controller.signal.aborted) setPreview({ link: parsed, result });
+      });
+    }, AUTO_FETCH_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [value]);
 
   const submit = (raw = value) => {
     const parsed = parseLink(raw);
@@ -175,18 +220,21 @@ function LinkInputForm({ onImport }: { onImport: (l: ParsedLink) => void }) {
       return;
     }
     setError(null);
-    onImport(parsed);
+    // 이미 불러온 미리보기가 있으면 다시 크롤링하지 않고 그대로 넘긴다
+    onImport(parsed, preview?.link.url === parsed.url ? preview.result ?? undefined : undefined);
   };
 
   const paste = async () => {
     try {
-      const text = await navigator.clipboard.readText();
+      const text = (await navigator.clipboard.readText()).trim();
       setValue(text);
       setError(null);
     } catch {
       setError("클립보드에 접근할 수 없어요. 직접 붙여넣어 주세요");
     }
   };
+
+  const loading = !!preview && !preview.result;
 
   return (
     <>
@@ -195,7 +243,7 @@ function LinkInputForm({ onImport }: { onImport: (l: ParsedLink) => void }) {
           error ? "ring-toss-red" : "ring-transparent focus-within:ring-toss-blue"
         }`}
       >
-        <Link2 size={18} className="shrink-0 text-grey-400" />
+        {loading ? <Loader2 size={18} className="shrink-0 animate-spin text-toss-blue" /> : <Link2 size={18} className="shrink-0 text-grey-400" />}
         <input
           value={value}
           inputMode="url"
@@ -221,7 +269,62 @@ function LinkInputForm({ onImport }: { onImport: (l: ParsedLink) => void }) {
           <AlertCircle size={14} /> {error}
         </p>
       )}
+      {preview && <LinkPreviewCard preview={preview} onConfirm={() => submit()} />}
     </>
+  );
+}
+
+/** 링크 미리보기 카드: 로딩 스피너 → 대표 이미지·상품명 (실패 시 직접 입력 안내) */
+function LinkPreviewCard({ preview: { link, result }, onConfirm }: { preview: Preview; onConfirm: () => void }) {
+  if (!result)
+    return (
+      <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white p-3" aria-live="polite">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-grey-100">
+          <Loader2 size={22} className="animate-spin text-toss-blue" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-grey-500">{link.mall ?? "쇼핑몰"}</p>
+          <p className="mt-0.5 text-[15px] font-semibold text-grey-700">상품 정보를 불러오고 있어요…</p>
+        </div>
+      </div>
+    );
+
+  const p = result.product;
+  // 가격만 못 가져온 경우에도 이미지·상품명이 있으면 미리보기는 보여준다
+  const hasPreview = !!(p.name || p.imageUrl);
+  return (
+    <div className="mt-3 rounded-2xl bg-white p-3" aria-live="polite">
+      {hasPreview ? (
+        <div className="flex items-start gap-3">
+          <ProductThumb product={p} size="md" className="!rounded-xl" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-grey-500">{p.brand || p.mall}</p>
+            <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug text-grey-900">{p.name || "상품명을 입력해 주세요"}</p>
+            {p.price > 0 ? (
+              <p className="mt-1 text-[15px] font-bold text-grey-900">{won(p.price)}</p>
+            ) : (
+              result.description && <p className="mt-1 line-clamp-1 text-[12px] text-grey-500">{result.description}</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="flex items-start gap-2 text-[14px] font-semibold leading-snug text-grey-800">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-toss-orange" />
+          {link.mall ?? "이 쇼핑몰"}에서 상품 정보를 자동으로 불러오지 못했어요. 상품명과 사진을 직접 입력할 수 있어요.
+        </p>
+      )}
+      <Button size="sm" variant={result.ok ? "primary" : "weak"} onClick={onConfirm} className="mt-3 h-10 text-[14px]">
+        {result.ok ? (
+          <>
+            <Gift size={16} /> 이 상품으로 펀딩 만들기
+          </>
+        ) : (
+          <>
+            <Pencil size={14} /> {hasPreview ? "나머지 정보 직접 입력하기" : "직접 입력하기"}
+          </>
+        )}
+      </Button>
+    </div>
   );
 }
 
@@ -230,18 +333,24 @@ function LinkInputForm({ onImport }: { onImport: (l: ParsedLink) => void }) {
 /** 1차 펀딩 완판 후: 링크 입력 → 상품 확인(LinkImportSheet) 순서로 다음 회차 펀딩 생성 */
 export function NextWishSheet({ open, round, onClose, onCreate }: { open: boolean; round: number; onClose: () => void; onCreate: (f: Funding) => void }) {
   const [link, setLink] = useState<ParsedLink | null>(null);
+  const [prefetched, setPrefetched] = useState<CrawlResult | null>(null);
 
   useEffect(() => {
     if (open) setLink(null);
   }, [open]);
 
   if (!open) return null;
-  if (link) return <LinkImportSheet link={link} round={round} onClose={onClose} onCreate={onCreate} />;
+  if (link) return <LinkImportSheet link={link} prefetched={prefetched} round={round} onClose={onClose} onCreate={onCreate} />;
 
   return (
     <BottomSheet open onClose={onClose} title={`다음 위시리스트 모금함 열기 · ${round}탄`} description="갖고 싶은 다음 선물의 상품 링크를 붙여넣으세요.">
       <div className="mb-4 mt-1 rounded-[20px] bg-toss-blue-light p-4 pt-0.5">
-        <LinkInputForm onImport={setLink} />
+        <LinkInputForm
+          onImport={(l, r) => {
+            setPrefetched(r ?? null);
+            setLink(l);
+          }}
+        />
       </div>
     </BottomSheet>
   );
