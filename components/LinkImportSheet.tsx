@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Camera, Check, ExternalLink, Gift, ImageIcon, Pencil, RotateCw } from "lucide-react";
+import { AlertCircle, Camera, Check, ExternalLink, Gift, ImageIcon, Link2, Pencil, RotateCw } from "lucide-react";
 import { CRAWL_ERROR_TEXT, type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
@@ -165,7 +165,7 @@ export function LinkImportSheet({
             <p className="mt-1.5 text-[12px] text-grey-500">쇼핑몰 판매가 또는 희망 가격을 입력해 주세요</p>
           </FormField>
           <FormField label="대표 사진">
-            <ImagePicker product={draft} onChange={set} defaultOpen className="!mt-0" />
+            <ImagePicker product={draft} onChange={set} className="!mt-0" />
           </FormField>
         </>
       )}
@@ -275,6 +275,22 @@ function ImagePicker({
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // 크롤링이 이미지를 못 가져왔거나 잘못 가져와도 바로 고칠 수 있도록 주소 입력칸은 항상 열어 둔다
+  const [imageUrlInput, setImageUrlInput] = useState(product.imageUrl?.startsWith("http") ? product.imageUrl : "");
+
+  const applyImageUrl = (raw: string) => {
+    setImageUrlInput(raw);
+    const v = raw.trim();
+    if (!v) return setError(null);
+    try {
+      const u = new URL(v.startsWith("//") ? `https:${v}` : v);
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error();
+      setError(null);
+      replaceImage({ imageUrl: u.toString() });
+    } catch {
+      setError("http(s)로 시작하는 이미지 주소를 입력해주세요");
+    }
+  };
 
   const replaceImage = (patch: Partial<Product>) => onChange(patch);
 
@@ -288,6 +304,7 @@ function ImagePicker({
     try {
       // blob: 주소는 탭·화면이 바뀌면 깨질 수 있어 data URL로 저장
       replaceImage({ imageUrl: await fileToDataUrl(file) });
+      setImageUrlInput("");
     } catch {
       setError("사진을 읽지 못했어요. 다른 사진을 골라주세요");
     }
@@ -303,12 +320,6 @@ function ImagePicker({
             className="flex items-center gap-1 rounded-full bg-grey-900/70 px-3 py-1.5 text-[12px] font-semibold text-white backdrop-blur"
           >
             <ImageIcon size={14} /> 기본 이미지
-          </button>
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1 rounded-full bg-grey-900/70 px-3 py-1.5 text-[12px] font-semibold text-white backdrop-blur"
-          >
-            <Camera size={14} /> 사진 올리기
           </button>
         </div>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
@@ -331,6 +342,26 @@ function ImagePicker({
           })}
         </div>
       )}
+      {/* 자동 수집이 차단돼도 직접 고칠 수 있게 '사진 업로드'와 '이미지 주소 입력'은 항상 열려 있다 */}
+      <div className="mt-3 flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-grey-100 px-3 py-2.5">
+          <Link2 size={16} className="shrink-0 text-grey-400" />
+          <input
+            value={imageUrlInput}
+            inputMode="url"
+            onChange={(e) => applyImageUrl(e.target.value)}
+            placeholder="이미지 주소 직접 입력 (https://…)"
+            aria-label="이미지 주소 직접 입력"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-grey-900 outline-none placeholder:text-grey-400"
+          />
+        </div>
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="flex shrink-0 items-center gap-1 rounded-xl bg-grey-100 px-3 py-2.5 text-[13px] font-semibold text-grey-700 active:bg-grey-200"
+        >
+          <Camera size={15} /> 사진 업로드
+        </button>
+      </div>
       {error && <p className="mt-2 text-[13px] text-toss-red">{error}</p>}
     </div>
   );

@@ -4,8 +4,10 @@ import type { CrawlErrorCode, CrawlResponse, RawMeta } from "@/lib/crawl";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** 리다이렉트·모바일 재시도까지 포함한 전체 크롤링 제한 시간 (구찌·쿠팡 등이 응답을 붙잡아 두는 경우 대비) */
-const DEADLINE_MS = 4000;
+/** Microlink → 내부 파서 폴백까지 포함한 전체 제한 시간 (Vercel 함수 10초 제한 안쪽) */
+const DEADLINE_MS = 8000;
+/** Microlink 한 번에 기다리는 최대 시간. 넘기면 바로 내부 파서로 넘어간다 */
+const MICROLINK_TIMEOUT_MS = 4500;
 const MAX_REDIRECTS = 8;
 const MAX_BYTES = 3 * 1024 * 1024;
 /** 본문 이미지 중 이 크기(px) 이상으로 선언된 것을 '큰 이미지'로 본다 */
@@ -24,6 +26,12 @@ const CHROME_HEADERS = {
   "Sec-Fetch-User": "?1",
   "Sec-CH-UA": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
 };
+/** 카카오톡·페이스북 링크 미리보기 봇: 대부분의 쇼핑몰이 공유 미리보기를 위해 OG 태그를 그대로 내어준다 */
+const BOT_BASE = { Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8" };
+const BOTS = [
+  { ...BOT_BASE, "User-Agent": "kakaotalk-scrap/1.0; +https://devtalk.kakao.com/t/scrap/33984" },
+  { ...BOT_BASE, "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" },
+];
 const BROWSERS = [
   {
     ...CHROME_HEADERS,
@@ -265,7 +273,7 @@ async function crawl(target: URL, headers: Record<string, string>, signal: Abort
   }
 }
 
-/** GET /api/crawl?url=… → 상품 페이지의 OG/JSON-LD/본문 메타데이터 */
+/** GET /api/crawl?url=… → 상품 메타데이터 (Microlink 우선, 실패 시 내부 OG/JSON-LD/본문 파서) */
 export async function GET(req: NextRequest) {
   let target: URL;
   try {
@@ -275,7 +283,7 @@ export async function GET(req: NextRequest) {
   }
   if (!isPublicHttpUrl(target)) return fail("network");
 
-  // 하나의 AbortController로 전체 3초를 묶는다: 시간이 지나면 진행 중인 요청·본문 읽기를 모두 끊고 실패로 응답
+  // 하나의 AbortController로 전체 제한 시간을 묶는다: 시간이 지나면 진행 중인 요청·본문 읽기를 모두 끊고 실패로 응답
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DEADLINE_MS);
   try {
@@ -285,13 +293,75 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/** 봇 차단·에러 페이지의 제목 (상품명으로 쓰면 안 됨) */
+const BLOCK_PAGE_TITLE = /access denied|attention required|just a moment|forbidden|captcha|robot|too many requests|^error|에러|오류|차단|비정상|보안\s*(검사|확인)|접근이?\s*(제한|거부)|페이지를 찾을 수 없/i;
+
+/** 차단 페이지에서 뽑힌 상품명·설명은 버린다 (이미지는 로고일 가능성이 높아 함께 버림) */
+function sanitize(meta: RawMeta): RawMeta {
+  if (meta.name && BLOCK_PAGE_TITLE.test(meta.name)) return { siteName: meta.siteName };
+  // 네이버처럼 렌더링 전 페이지에선 제목이 상품번호(숫자)나 URL만 남는 경우가 있다
+  if (meta.name && /^(\d+|https?:\/\/\S+)$/.test(meta.name.trim())) return { ...meta, name: undefined };
+  return meta;
+}
+
+type MicrolinkResponse = {
+  status?: string;
+  data?: { title?: string | null; description?: string | null; publisher?: string | null; url?: string | null; image?: { url?: string | null } | null };
+};
+
+/**
+ * Microlink API로 메타데이터를 받는다. 자체 헤드리스 브라우저·IP로 접근해 네이버·쿠팡 429 봇 차단을 피한다.
+ * MICROLINK_API_KEY가 있으면 유료(pro) 엔드포인트를 쓴다 (무료는 IP당 하루 50회).
+ */
+async function fetchMicrolink(target: URL, signal: AbortSignal): Promise<Attempt> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal.addEventListener("abort", abort);
+  const timer = setTimeout(abort, MICROLINK_TIMEOUT_MS);
+  try {
+    const key = process.env.MICROLINK_API_KEY;
+    const endpoint = key ? "https://pro.microlink.io" : "https://api.microlink.io";
+    const res = await fetch(`${endpoint}?url=${encodeURIComponent(target.toString())}`, {
+      signal: controller.signal,
+      headers: key ? { "x-api-key": key } : undefined,
+      cache: "no-store",
+    });
+    if (!res.ok) return { ok: false, code: res.status === 429 ? "blocked" : "network", status: res.status };
+    const body = (await res.json()) as MicrolinkResponse;
+    const d = body.data;
+    if (body.status !== "success" || !d) return { ok: false, code: "parse" };
+    let pageUrl = target;
+    try {
+      if (d.url) pageUrl = new URL(d.url);
+    } catch {
+      /* 잘못된 url은 무시 */
+    }
+    const description = d.description ? decodeEntities(d.description) : undefined;
+    const meta = sanitize({
+      name: d.title ? decodeEntities(d.title) : undefined,
+      imageUrl: toAbsoluteImageUrl(d.image?.url ?? undefined, pageUrl),
+      siteName: d.publisher ?? undefined,
+      description,
+      // Microlink는 가격을 따로 주지 않아 설명문 속 "…원"만 읽는다 (없으면 내부 파서가 채움)
+      price: parsePrice(/(\d{1,3}(?:,\d{3})+)\s*원/.exec(description ?? "")?.[1]),
+    });
+    if (!meta.name && !meta.imageUrl) return { ok: false, code: "parse" };
+    return { ok: true, meta };
+  } catch {
+    return { ok: false, code: "timeout" };
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", abort);
+  }
+}
+
 const META_KEYS = ["name", "price", "imageUrl", "brand", "siteName", "description"] as const;
 const isComplete = (m: RawMeta) => !!(m.name && m.imageUrl && m.price);
 
 /** 앞선 시도의 값을 우선하고, 빈 칸만 뒤 시도의 값으로 채운다 */
 function merge(attempts: Attempt[]): Attempt {
   const oks = attempts.filter((a): a is Extract<Attempt, { ok: true }> => a.ok);
-  if (!oks.length) return attempts.find((a) => !a.ok && a.code === "blocked") ?? attempts[0];
+  if (!oks.length) return attempts.find((a) => !a.ok && a.code === "blocked") ?? attempts[attempts.length - 1];
   const meta: RawMeta = {};
   for (const k of META_KEYS) {
     const v = oks.map((a) => a.meta[k]).find((x) => x !== undefined && x !== "");
@@ -300,12 +370,19 @@ function merge(attempts: Attempt[]): Attempt {
   return { ok: true, meta };
 }
 
-/** 데스크톱 크롬으로 먼저 시도하고, 차단되거나 상품명·이미지·가격 중 빈 값이 있으면 남은 시간 안에서 모바일 크롬으로 한 번 더 */
+/**
+ * 1) Microlink API (봇 차단 우회)
+ * 2) 실패·타임아웃이거나 상품명·이미지·가격 중 빈 값이 있으면 내부 파서로 폴백:
+ *    카카오톡·페이스북 미리보기 봇 헤더 → 그래도 부족하면 데스크톱·모바일 크롬 헤더 (각 단계는 병렬)
+ * 앞 단계에서 얻은 값을 우선하고, 빈 칸만 뒤 단계 값으로 채운다.
+ */
 async function crawlWithRetry(target: URL, signal: AbortSignal): Promise<Attempt> {
-  let result = await crawl(target, BROWSERS[0], signal);
-  if (!signal.aborted && (!result.ok || !isComplete(result.meta))) {
-    const mobile = await crawl(target, BROWSERS[1], signal);
-    result = merge([result, mobile]);
+  const attempts: Attempt[] = [await fetchMicrolink(target, signal)];
+  for (const group of [BOTS, BROWSERS]) {
+    const current = merge(attempts);
+    if (signal.aborted || (current.ok && isComplete(current.meta))) break;
+    const results = await Promise.all(group.map((h) => crawl(target, h, signal)));
+    attempts.push(...results.map((r) => (r.ok ? { ...r, meta: sanitize(r.meta) } : r)));
   }
-  return result;
+  return merge(attempts);
 }
