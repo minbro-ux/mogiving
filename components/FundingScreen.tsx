@@ -25,7 +25,8 @@ export function FundingScreen({
 }: {
   funding: Funding;
   role: Role;
-  onRoleChange: (r: Role) => void;
+  /** 없으면 시점 토글을 숨긴다 (공유 링크 화면) */
+  onRoleChange?: (r: Role) => void;
   onBack: () => void;
   onParticipate: () => void;
   onShare: () => void;
@@ -63,17 +64,19 @@ export function FundingScreen({
         </button>
       </header>
 
-      {/* 시점 전환: 수령자 본인 vs 친구 */}
-      <div className="px-5 pb-2">
-        <Segmented
-          value={role}
-          onChange={onRoleChange}
-          options={[
-            { value: "owner", label: "🙋 받는 사람(나)" },
-            { value: "friend", label: "👥 친구 시점" },
-          ]}
-        />
-      </div>
+      {/* 시점 전환(개발·테스트용): 수령자 본인 vs 친구. 공유 링크 화면에서는 노출하지 않는다 */}
+      {onRoleChange && (
+        <div className="px-5 pb-2">
+          <Segmented
+            value={role}
+            onChange={onRoleChange}
+            options={[
+              { value: "owner", label: "🙋 받는 사람(나)" },
+              { value: "friend", label: "👥 친구 시점" },
+            ]}
+          />
+        </div>
+      )}
 
       {/* 선물 정보 */}
       <section className="px-5 pt-4">

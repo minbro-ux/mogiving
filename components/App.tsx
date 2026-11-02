@@ -36,6 +36,8 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   const [screen, setScreen] = useState<Screen>(initialFunding ? "funding" : "shop");
   const [funding, setFunding] = useState<Funding | null>(initialFunding ?? null);
   const [role, setRole] = useState<Role>(initialRole);
+  /** 공유 링크로 들어온 방문자: 시점 토글·시나리오 패널(개발용)을 숨기고 친구 시점으로 고정 */
+  const sharedVisit = !!initialFunding && initialRole === "friend";
   const [sheet, setSheet] = useState<Sheet>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -183,11 +185,16 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
         <>
           <FundingScreen
             funding={funding}
-            role={role}
-            onRoleChange={(r) => {
-              setRole(r);
-              showToast(r === "owner" ? "받는 사람(나)의 화면이에요" : "링크를 받은 친구의 화면이에요");
-            }}
+            // 공유받은 펀딩은 항상 친구 시점 (방문자가 직접 만든 펀딩은 본인 시점)
+            role={sharedVisit && funding.id === initialFunding?.id ? "friend" : role}
+            onRoleChange={
+              sharedVisit
+                ? undefined
+                : (r) => {
+                    setRole(r);
+                    showToast(r === "owner" ? "받는 사람(나)의 화면이에요" : "링크를 받은 친구의 화면이에요");
+                  }
+            }
             onBack={() => setScreen("shop")}
             onParticipate={() => setSheet("participate")}
             onShare={share}
@@ -215,14 +222,16 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
         </>
       )}
 
-      <ScenarioPanel
-        hasFunding={!!funding && screen === "funding"}
-        canAct={funding?.phase === "active"}
-        onPreset={loadPreset}
-        onRandomJoin={randomJoin}
-        onCloseNow={closeNow}
-        onReset={reset}
-      />
+      {!sharedVisit && (
+        <ScenarioPanel
+          hasFunding={!!funding && screen === "funding"}
+          canAct={funding?.phase === "active"}
+          onPreset={loadPreset}
+          onRandomJoin={randomJoin}
+          onCloseNow={closeNow}
+          onReset={reset}
+        />
+      )}
       <Toast message={toast} />
     </main>
   );
