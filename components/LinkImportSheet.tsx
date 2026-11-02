@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Camera, Check, ExternalLink, Gift, ImageIcon, Link2, Pencil, RotateCw } from "lucide-react";
-import { CRAWL_ERROR_TEXT, type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
+import { type CrawlErrorCode, type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
@@ -141,11 +141,8 @@ export function LinkImportSheet({
         </>
       ) : (
         <>
-          <CrawlFailNotice
-            code={result.error.code}
-            status={result.error.status}
-            onRetry={() => setTarget(parsedUrl ?? { ...link })}
-          />
+          <CrawlFailNotice code={result.error.code} onRetry={() => setTarget(parsedUrl ?? { ...link })} />
+          <CaptureUploadButton uploaded={!!draft.imageUrl?.startsWith("data:")} onUpload={(imageUrl) => set({ imageUrl })} />
 
           <FormField label="상품 링크" hint={parsedUrl && <span className="text-[12px] text-grey-500">{parsedUrl.mall ?? "기타 쇼핑몰"}</span>}>
             <input value={url} inputMode="url" onChange={(e) => setUrl(e.target.value)} placeholder="https://" className={`${inputClass} !text-[15px]`} />
@@ -180,26 +177,73 @@ export function LinkImportSheet({
 
 /* ------------------------------ 크롤링 실패 안내 ------------------------------ */
 
-function CrawlFailNotice({ code, status, onRetry }: { code: keyof typeof CRAWL_ERROR_TEXT; status?: number; onRetry: () => void }) {
-  // 차단·무응답은 대부분 쇼핑몰 보안 정책(봇 차단) 때문
+function CrawlFailNotice({ code, onRetry }: { code: CrawlErrorCode; onRetry: () => void }) {
+  // 차단·무응답은 대부분 쇼핑몰 보안 정책(봇 차단) 때문. 상태 코드 같은 기술적인 내용은 보여주지 않는다
   const security = code === "blocked" || code === "timeout";
   return (
     <div className="mt-4 rounded-2xl bg-toss-orange-light p-4">
       <p className="flex items-start gap-2 text-[15px] font-bold leading-snug text-grey-900">
         <AlertCircle size={18} className="mt-0.5 shrink-0 text-toss-orange" />
-        {security ? "보안 정책으로 정보를 자동으로 불러오지 못했어요." : "정보를 자동으로 불러오지 못했어요."} 상품명과 금액을 입력해 주세요.
+        {security ? "쇼핑몰 보안으로 사진을 자동으로 불러오지 못했어요" : "상품 정보를 자동으로 불러오지 못했어요"}
       </p>
-      <div className="mt-1.5 flex items-center justify-between gap-2 pl-[26px] text-[13px] text-grey-600">
-        <span>
-          {CRAWL_ERROR_TEXT[code]}
-          {status ? ` (${status})` : ""}
-        </span>
-        <button onClick={onRetry} className="flex shrink-0 items-center gap-1 font-semibold text-grey-700">
-          <RotateCw size={13} /> 다시 시도
-        </button>
-      </div>
+      <p className="mt-1.5 pl-[26px] text-[14px] leading-relaxed text-grey-700">
+        상품 화면의 대표 사진을 캡처하거나 저장해서 아래 버튼으로 등록해 주세요!
+      </p>
+      <button onClick={onRetry} className="mt-2 flex items-center gap-1 pl-[26px] text-[13px] font-semibold text-grey-500">
+        <RotateCw size={13} /> 다시 불러오기
+      </button>
     </div>
   );
+}
+
+/** 안내 박스 바로 아래의 메인 액션: 갤러리(사진 보관함)에서 캡처한 사진을 고른다 */
+function CaptureUploadButton({ uploaded, onUpload }: { uploaded: boolean; onUpload: (imageUrl: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="mt-3">
+      <Button onClick={() => fileRef.current?.click()} variant={uploaded ? "weak" : "primary"}>
+        {uploaded ? (
+          <>
+            <Check size={20} /> 사진 등록 완료 · 다른 사진으로 바꾸기
+          </>
+        ) : (
+          <>
+            <Camera size={20} /> 캡처한 사진 올리기
+          </>
+        )}
+      </Button>
+      {/* capture 속성을 넣지 않아야 모바일에서 카메라가 아닌 사진 보관함/갤러리가 바로 열린다 */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const r = await readImageFile(e);
+          if (!r) return;
+          if ("error" in r) return setError(r.error);
+          setError(null);
+          onUpload(r.imageUrl);
+        }}
+      />
+      {error && <p className="mt-2 text-[13px] text-toss-red">{error}</p>}
+    </div>
+  );
+}
+
+/** 파일 선택 결과를 data URL로 읽는다 (blob: 주소는 탭·화면이 바뀌면 깨질 수 있음) */
+async function readImageFile(e: React.ChangeEvent<HTMLInputElement>): Promise<{ imageUrl: string } | { error: string } | null> {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return null;
+  if (!file.type.startsWith("image/")) return { error: "이미지 파일만 올릴 수 있어요" };
+  if (file.size > MAX_IMAGE_MB * 1024 * 1024) return { error: `${MAX_IMAGE_MB}MB 이하 사진만 올릴 수 있어요` };
+  try {
+    return { imageUrl: await fileToDataUrl(file) };
+  } catch {
+    return { error: "사진을 읽지 못했어요. 다른 사진을 골라주세요" };
+  }
 }
 
 /* --------------------------- 자동 입력값 확인 & 수정 --------------------------- */
@@ -295,19 +339,12 @@ function ImagePicker({
   const replaceImage = (patch: Partial<Product>) => onChange(patch);
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) return setError("이미지 파일만 올릴 수 있어요");
-    if (file.size > MAX_IMAGE_MB * 1024 * 1024) return setError(`${MAX_IMAGE_MB}MB 이하 사진만 올릴 수 있어요`);
+    const r = await readImageFile(e);
+    if (!r) return;
+    if ("error" in r) return setError(r.error);
     setError(null);
-    try {
-      // blob: 주소는 탭·화면이 바뀌면 깨질 수 있어 data URL로 저장
-      replaceImage({ imageUrl: await fileToDataUrl(file) });
-      setImageUrlInput("");
-    } catch {
-      setError("사진을 읽지 못했어요. 다른 사진을 골라주세요");
-    }
+    replaceImage({ imageUrl: r.imageUrl });
+    setImageUrlInput("");
   };
 
   return (
