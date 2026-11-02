@@ -1,5 +1,6 @@
 import { percent } from "./format";
 import { PRODUCTS, buildParticipants, createFunding, sumAmount } from "./mock";
+import { type ContributionSummary, participantsFromSummary } from "./contribute";
 import { linkOrigin } from "./site";
 import type { Funding, Product, ShippingAddress } from "./types";
 
@@ -160,12 +161,27 @@ export async function registerShortLink(f: Funding, prev?: ShortLink | null): Pr
 export const shareTitle = (s: SharePayload) => `${s.o}님의 위시리스트 · ${s.p.name} 조각 펀딩`;
 export const shareDescription = (s: SharePayload) => `커피 한 잔 값으로 축하를 전해보세요. 현재 ${s.r}% 달성 중!`;
 
-/** 공유 링크로 들어온 친구 화면용 펀딩 복원 (참여 내역은 달성률에 맞춘 데모 데이터) */
-export function fundingFromShare(s: SharePayload): Funding {
+/**
+ * 공유 링크로 들어온 친구 화면용 펀딩 복원.
+ * summary(DB 참여 내역)가 있으면 실제 금액으로, 없으면(긴 링크·저장소 장애) 달성률에 맞춘 데모 데이터로 채운다
+ */
+export function fundingFromShare(s: SharePayload, summary?: ContributionSummary | null): Funding {
   const curated = PRODUCTS.find((p) => p.id === s.p.id);
   const { img, opt, ...rest } = s.p;
   const product: Product = { ...(curated ?? { ...rest, imageUrl: img }), option: opt };
   const base = createFunding(product, { title: s.t });
+  if (summary) {
+    const goal = summary.goal && summary.goal > 0 ? summary.goal : base.goal;
+    return {
+      ...base,
+      id: s.id,
+      goal,
+      ownerName: s.o,
+      deadline: s.d,
+      participants: participantsFromSummary(summary),
+      phase: summary.collected >= goal ? "achieved" : s.d <= Date.now() ? "under" : "active",
+    };
+  }
   const raised = Math.round((base.goal * s.r) / 100 / 1000) * 1000;
   const chunks = raised > 0 ? Math.max(1, Math.ceil(s.r / 15)) : 0;
   const amounts = Array.from({ length: chunks }, (_, i) =>

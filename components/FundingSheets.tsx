@@ -19,15 +19,20 @@ export function ParticipateSheet({
   funding,
   remaining,
   onClose,
-  onPaid,
+  onPay,
+  onDone,
 }: {
   open: boolean;
   funding: Funding;
   remaining: number;
   onClose: () => void;
-  onPaid: (p: Omit<Participant, "id" | "createdAt">) => void;
+  /** 결제 후 참여 내역·메시지를 DB에 저장. 실패하면 사용자에게 보여줄 오류 문구, 성공하면 null */
+  onPay: (p: Omit<Participant, "id" | "createdAt">) => Promise<string | null>;
+  /** 완료 화면에서 '확인' */
+  onDone: () => void;
 }) {
   const [step, setStep] = useState<"form" | "paying" | "done">("form");
+  const [payError, setPayError] = useState<string | null>(null);
   const [mode, setMode] = useState<"piece" | "free">("piece");
   const [count, setCount] = useState(1);
   const [freeAmount, setFreeAmount] = useState(0);
@@ -42,6 +47,7 @@ export function ParticipateSheet({
       setFreeAmount(0);
       setNickname("");
       setMessage("");
+      setPayError(null);
     }
   }, [open]);
 
@@ -49,14 +55,26 @@ export function ParticipateSheet({
   const amount = mode === "piece" ? piecesAmount(count, pieces.unit, remaining) : freeAmount;
   const valid = amount >= 1000 && nickname.trim() && message.trim();
 
-  const pay = () => {
+  const pay = async () => {
     setStep("paying");
-    setTimeout(() => setStep("done"), 1400);
+    setPayError(null);
+    // 결제 연출(1.4초)과 DB 저장을 함께 기다린다. 저장에 실패하면 완료 화면 대신 입력 화면에 오류를 보여준다
+    const [error] = await Promise.all([
+      onPay({ nickname: nickname.trim(), message: message.trim(), amount, isMe: true }).catch((e: unknown) => {
+        console.error("[mogiving] 조각 선물 처리 중 예외", e);
+        return "선물 내역을 저장하지 못했어요. 잠시 후 다시 시도해 주세요";
+      }),
+      new Promise((r) => setTimeout(r, 1400)),
+    ]);
+    if (error) {
+      setPayError(error);
+      setStep("form");
+      return;
+    }
+    setStep("done");
   };
 
-  const finish = () => {
-    onPaid({ nickname: nickname.trim(), message: message.trim(), amount, isMe: true });
-  };
+  const finish = onDone;
 
   if (step === "paying")
     return (
@@ -110,6 +128,11 @@ export function ParticipateSheet({
         </Button>
       }
     >
+      {payError && (
+        <p role="alert" className="mt-3 rounded-xl bg-toss-red-light px-3.5 py-3 text-[14px] font-semibold text-toss-red">
+          {payError}
+        </p>
+      )}
       <div className="mt-3 flex items-center gap-3 rounded-2xl bg-grey-50 p-3">
         <ProductThumb product={funding.product} size="sm" />
         <p className="line-clamp-2 text-[14px] text-grey-700">{funding.product.name}</p>

@@ -80,10 +80,29 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
       return rows[0]?.payload ?? null;
     },
     async list() {
-      const res = await call(`?select=id,payload,shipping,created_at,updated_at&order=created_at.desc&limit=1000`, { method: "GET" });
+      // select=*: 참여 누적 컬럼(collected_amount)이 아직 없는 DB에서도 목록이 깨지지 않게
+      const res = await call(`?select=*&order=created_at.desc&limit=1000`, { method: "GET" });
       if (!res.ok) throw new Error(`supabase list ${res.status}`);
-      const rows = (await res.json()) as { id: string; payload: SharePayload; shipping: ShippingAddress | null; created_at: string; updated_at: string }[];
-      return rows.map((r) => ({ id: r.id, payload: r.payload, shipping: r.shipping, createdAt: r.created_at, updatedAt: r.updated_at }));
+      const rows = (await res.json()) as {
+        id: string;
+        payload: SharePayload;
+        shipping: ShippingAddress | null;
+        created_at: string;
+        updated_at: string;
+        goal?: number | null;
+        collected_amount?: number;
+      }[];
+      return rows.map((r) => ({
+        id: r.id,
+        // 현재 모인 금액은 주최자 화면 값(x.a)이 아니라 실제 결제 저장값(DB)을 쓴다
+        payload:
+          typeof r.collected_amount === "number" && r.payload.x
+            ? { ...r.payload, x: { ...r.payload.x, g: r.goal ?? r.payload.x.g, a: r.collected_amount } }
+            : r.payload,
+        shipping: r.shipping,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
     },
   };
 }
