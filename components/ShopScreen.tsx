@@ -6,7 +6,7 @@ import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
 import { type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, OptionField, PeriodPicker, SafetyNote, ShippingFields, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, OptionField, OwnerNameField, PeriodPicker, SafetyNote, ShippingFields, shippingStatus, toShipping } from "./FundingForm";
 import { LinkImportSheet } from "./LinkImportSheet";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 import { WishRequestSheet } from "./WishRequestSheet";
@@ -331,7 +331,19 @@ function LinkPreviewCard({ preview: { link, result }, onConfirm }: { preview: Pr
 /* ------------------------ 다음 모금함(2탄) 열기 바텀시트 ------------------------ */
 
 /** 1차 펀딩 완판 후: 링크 입력 → 상품 확인(LinkImportSheet) 순서로 다음 회차 펀딩 생성 */
-export function NextWishSheet({ open, round, onClose, onCreate }: { open: boolean; round: number; onClose: () => void; onCreate: (f: Funding) => void }) {
+export function NextWishSheet({
+  open,
+  round,
+  ownerName,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  round: number;
+  ownerName: string;
+  onClose: () => void;
+  onCreate: (f: Funding) => void;
+}) {
   const [link, setLink] = useState<ParsedLink | null>(null);
   const [prefetched, setPrefetched] = useState<CrawlResult | null>(null);
 
@@ -340,7 +352,7 @@ export function NextWishSheet({ open, round, onClose, onCreate }: { open: boolea
   }, [open]);
 
   if (!open) return null;
-  if (link) return <LinkImportSheet link={link} prefetched={prefetched} round={round} onClose={onClose} onCreate={onCreate} />;
+  if (link) return <LinkImportSheet link={link} prefetched={prefetched} round={round} initialOwnerName={ownerName} onClose={onClose} onCreate={onCreate} />;
 
   return (
     <BottomSheet open onClose={onClose} title={`다음 위시리스트 모금함 열기 · ${round}탄`} description="갖고 싶은 다음 선물의 상품 링크를 붙여넣으세요.">
@@ -383,6 +395,7 @@ function ProductCard({ product: p, onClick }: { product: Product; onClick: () =>
 }
 
 function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | null; onClose: () => void; onCreate: (f: Funding) => void }) {
+  const [ownerName, setOwnerName] = useState("");
   const [days, setDays] = useState(7);
   const [option, setOption] = useState("");
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
@@ -393,7 +406,10 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
       open
       onClose={onClose}
       footer={
-        <Button disabled={shippingStatus(shipping) === "partial"} onClick={() => onCreate(createFunding(p, { days, option, shipping: toShipping(shipping) }))}>
+        <Button
+          disabled={!ownerName.trim() || shippingStatus(shipping) === "partial"}
+          onClick={() => onCreate(createFunding(p, { ownerName, days, option, shipping: toShipping(shipping) }))}
+        >
           <Gift size={20} /> 이 추천 상품으로 펀딩 열기
         </Button>
       }
@@ -412,6 +428,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
         <span className="text-[22px] font-bold text-grey-900">{won(p.price)}</span>
         {p.originalPrice && <span className="text-[15px] text-grey-400 line-through">{won(p.originalPrice)}</span>}
       </div>
+      <OwnerNameField value={ownerName} onChange={setOwnerName} />
       <OptionField value={option} onChange={setOption} />
       <PeriodPicker value={days} onChange={setDays} />
       <ShippingFields value={shipping} onChange={setShipping} />

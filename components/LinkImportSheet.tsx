@@ -7,7 +7,7 @@ import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FormField, OptionField, PeriodPicker, PriceInput, SafetyNote, ShippingFields, inputClass, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FormField, OptionField, OwnerNameField, PeriodPicker, PriceInput, SafetyNote, ShippingFields, inputClass, shippingStatus, toShipping } from "./FundingForm";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 
 /** 사진을 못 가져왔을 때 고를 수 있는 기본 대표 이미지 */
@@ -32,6 +32,7 @@ export function LinkImportSheet({
   link,
   prefetched,
   round,
+  initialOwnerName = "",
   onClose,
   onCreate,
 }: {
@@ -39,6 +40,8 @@ export function LinkImportSheet({
   /** 입력창 미리보기에서 이미 불러온 결과. 같은 링크면 다시 크롤링하지 않는다 */
   prefetched?: CrawlResult | null;
   round?: number;
+  /** 다음 회차 펀딩을 열 때 이전 펀딩의 이름을 미리 채운다 */
+  initialOwnerName?: string;
   onClose: () => void;
   onCreate: (f: Funding) => void;
 }) {
@@ -46,6 +49,7 @@ export function LinkImportSheet({
   const [result, setResult] = useState<CrawlResult | null>(null);
   const [draft, setDraft] = useState<Product | null>(null);
   const [url, setUrl] = useState(link?.url ?? "");
+  const [ownerName, setOwnerName] = useState(initialOwnerName);
   const [days, setDays] = useState(7);
   const [option, setOption] = useState("");
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
@@ -105,13 +109,13 @@ export function LinkImportSheet({
 
   const manual = !result.ok;
   const parsedUrl = parseLink(url);
-  const valid = draft.name.trim().length > 1 && draft.price >= 1000 && !!parsedUrl && shippingStatus(shipping) !== "partial";
+  const valid = !!ownerName.trim() && draft.name.trim().length > 1 && draft.price >= 1000 && !!parsedUrl && shippingStatus(shipping) !== "partial";
   const set = (patch: Partial<Product>) => setDraft({ ...draft, ...patch });
 
   const create = () => {
     if (!parsedUrl) return;
     const mall = parsedUrl.mall ?? draft.mall;
-    onCreate(createFunding({ ...draft, url: parsedUrl.url, mall, brand: draft.brand || mall }, { days, round, option, shipping: toShipping(shipping) }));
+    onCreate(createFunding({ ...draft, url: parsedUrl.url, mall, brand: draft.brand || mall }, { ownerName, days, round, option, shipping: toShipping(shipping) }));
   };
 
   return (
@@ -167,6 +171,7 @@ export function LinkImportSheet({
         </>
       )}
 
+      <OwnerNameField value={ownerName} onChange={setOwnerName} />
       <OptionField value={option} onChange={setOption} />
       <PeriodPicker value={days} onChange={setDays} />
       <ShippingFields value={shipping} onChange={setShipping} />

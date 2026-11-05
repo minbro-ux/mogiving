@@ -67,7 +67,17 @@ export function PriceInput({ value, onChange }: { value: number; onChange: (v: n
   );
 }
 
-/* ------------------------------- 옵션 · 배송지 ------------------------------- */
+/* ---------------------------- 이름 · 옵션 · 배송지 ---------------------------- */
+
+/** 펀딩 주인공 이름 (필수). 친구 화면과 공유 제목·미리보기에 그대로 나간다 */
+export function OwnerNameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <FormField label="내 이름" hint={<span className="text-[12px] text-toss-blue">필수</span>}>
+      <input value={value} maxLength={20} onChange={(e) => onChange(e.target.value)} placeholder="친구들이 알아볼 수 있는 이름" className={inputClass} />
+      <p className="mt-1.5 text-[12px] text-grey-500">공유 링크와 펀딩 화면에 이 이름으로 표시돼요</p>
+    </FormField>
+  );
+}
 
 export function OptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (

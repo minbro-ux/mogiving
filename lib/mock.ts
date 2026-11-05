@@ -26,19 +26,19 @@ export const sumAmount = (ps: Participant[]) => ps.reduce((s, p) => s + p.amount
 
 export function createFunding(
   product: Product,
-  opts?: { title?: string; message?: string; days?: number; round?: number; option?: string; shipping?: ShippingAddress },
+  opts: { ownerName: string; title?: string; message?: string; days?: number; round?: number; option?: string; shipping?: ShippingAddress },
 ): Funding {
-  const round = opts?.round ?? 1;
-  const option = opts?.option?.trim();
+  const round = opts.round ?? 1;
+  const option = opts.option?.trim();
   return {
     id: `f-${Date.now()}`,
     product: option ? { ...product, option } : product,
-    ...(opts?.shipping ? { shipping: opts.shipping } : {}),
+    ...(opts.shipping ? { shipping: opts.shipping } : {}),
     goal: product.price,
-    title: opts?.title || (round > 1 ? `내 생일 선물 펀딩 ${round}탄` : "내 생일 선물 펀딩"),
-    ownerName: "김토스",
-    ownerMessage: opts?.message || "올해 생일엔 이 선물이 정말 갖고 싶어요! 마음 모아주시면 감사히 받을게요 🙏",
-    deadline: Date.now() + (opts?.days ?? 7) * DAY,
+    title: opts.title || (round > 1 ? `내 생일 선물 펀딩 ${round}탄` : "내 생일 선물 펀딩"),
+    ownerName: opts.ownerName.trim(),
+    ownerMessage: opts.message || "올해 생일엔 이 선물이 정말 갖고 싶어요! 마음 모아주시면 감사히 받을게요 🙏",
+    deadline: Date.now() + (opts.days ?? 7) * DAY,
     participants: [],
     phase: "active",
     round,

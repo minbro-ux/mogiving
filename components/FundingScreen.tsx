@@ -256,6 +256,7 @@ export function FundingScreen({
         <NextWishSheet
           open={nextOpen}
           round={funding.round + 1}
+          ownerName={funding.ownerName}
           onClose={() => setNextOpen(false)}
           onCreate={(f) => {
             setNextOpen(false);

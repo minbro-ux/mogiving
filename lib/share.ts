@@ -170,14 +170,13 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
   const curated = PRODUCTS.find((p) => p.id === s.p.id);
   const { img, opt, ...rest } = s.p;
   const product: Product = { ...(curated ?? { ...rest, imageUrl: img }), option: opt };
-  const base = createFunding(product, { title: s.t });
+  const base = createFunding(product, { title: s.t, ownerName: s.o });
   if (summary) {
     const goal = summary.goal && summary.goal > 0 ? summary.goal : base.goal;
     return {
       ...base,
       id: s.id,
       goal,
-      ownerName: s.o,
       deadline: s.d,
       participants: participantsFromSummary(summary),
       phase: summary.collected >= goal ? "achieved" : s.d <= Date.now() ? "under" : "active",
@@ -186,7 +185,6 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
   return {
     ...base,
     id: s.id,
-    ownerName: s.o,
     deadline: s.d,
     participants: [],
     phase: s.r >= 100 ? "achieved" : s.d <= Date.now() ? "under" : "active",
