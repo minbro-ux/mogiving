@@ -100,7 +100,7 @@ export function participantsFromSummary(s: ContributionSummary, mine: StoredCont
 
 /**
  * DB 요약을 펀딩 상태에 합친다.
- * keepLocal: 주최자 화면의 데모 참여(시나리오 패널)처럼 DB에 없는 로컬 참여를 남길지
+ * keepLocal: 공유 링크 발급 전에 이 기기 화면에만 반영된 참여처럼 DB에 없는 로컬 참여를 남길지
  */
 export function applySummary(f: Funding, s: ContributionSummary, mine: StoredContribution[], keepLocal: boolean): Funding {
   const goal = s.goal && s.goal > 0 ? s.goal : f.goal;

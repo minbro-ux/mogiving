@@ -5,10 +5,9 @@ import { Footer } from "@/components/Footer";
 import { FundingScreen, type Role } from "@/components/FundingScreen";
 import { ParticipateSheet, ShareSheet } from "@/components/FundingSheets";
 import { ResolutionSheet } from "@/components/ResolutionSheet";
-import { ScenarioPanel } from "@/components/ScenarioPanel";
 import { ShopScreen } from "@/components/ShopScreen";
 import { Toast } from "@/components/ui";
-import { SCENARIO_KEYS, type ScenarioKey, scenarioFunding, sumAmount } from "@/lib/mock";
+import { sumAmount } from "@/lib/mock";
 import { recallUploadedImage, rememberUploadedImage } from "@/lib/image";
 import { applySummary, fetchContributionSummary, participantFromStored, postContribution, recallMyContributions, rememberMyContribution } from "@/lib/contribute";
 import { type ShortLink, fundingShareUrl, registerShortLink, shareFunding, shortShareUrl, toStoredPayload } from "@/lib/share";
@@ -16,17 +15,6 @@ import type { Funding, Participant, Phase, Resolution } from "@/lib/types";
 
 type Screen = "shop" | "funding";
 type Sheet = "participate" | "share" | "resolve" | null;
-
-const RANDOM_FRIENDS = [
-  { nickname: "예린", message: "생일 축하해~ 선물 잘 받아!" },
-  { nickname: "준호", message: "작은 마음 보탭니다 🙌" },
-  { nickname: "소율", message: "언제나 응원해 💙" },
-  { nickname: "태민", message: "다음엔 내 차례다 ㅋㅋ" },
-];
-const RANDOM_AMOUNTS = [10000, 20000, 30000, 50000];
-
-/** 마감 시점의 상태 전이 (참여 시점에는 목표 금액을 넘을 수 없으므로 달성 아니면 미달) */
-const phaseAtDeadline = (f: Funding, raised: number): Phase => (raised >= f.goal ? "achieved" : "under");
 
 const needsChoice = (p?: Phase) => p === "achieved" || p === "under";
 
@@ -41,7 +29,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   const [screen, setScreen] = useState<Screen>(initialFunding ? "funding" : "shop");
   const [funding, setFunding] = useState<Funding | null>(initialFunding ?? null);
   const [role, setRole] = useState<Role>(initialRole);
-  /** 공유 링크로 들어온 방문자: 시점 토글·시나리오 패널(개발용)을 숨기고 친구 시점으로 고정 */
+  /** 공유 링크로 들어온 방문자: 시점 토글을 숨기고 친구 시점으로 고정 */
   const sharedVisit = !!initialFunding && initialRole === "friend";
   const [sheet, setSheet] = useState<Sheet>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -161,7 +149,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
 
   const syncNow = useRef<(() => Promise<void>) | null>(null);
   const syncShareId = funding && shortLink?.fundingId === funding.id ? shortLink.id : null;
-  // 공유 링크로 들어와 본 펀딩: 화면의 참여 내역을 DB 데이터로만 채운다 (주최자 화면은 데모 참여도 유지)
+  // 공유 링크로 들어와 본 펀딩: 화면의 참여 내역을 DB 데이터로만 채운다 (주최자 화면은 이 기기에만 반영된 참여도 유지)
   const isSharedFunding = !!initialFunding && funding?.id === initialFunding.id && initialRole === "friend";
   useEffect(() => {
     if (!syncShareId || screen !== "funding") return;
@@ -198,46 +186,12 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
     else if (result === "failed") showToast("링크를 복사하지 못했어요. 잠시 후 다시 시도해주세요");
   };
 
-  const randomJoin = () => {
-    const f = RANDOM_FRIENDS[Math.floor(Math.random() * RANDOM_FRIENDS.length)];
-    const amount = RANDOM_AMOUNTS[Math.floor(Math.random() * RANDOM_AMOUNTS.length)];
-    addParticipant({ ...f, amount });
-  };
-
-  const closeNow = () => {
-    if (!funding || funding.phase !== "active") return;
-    setFunding({ ...funding, deadline: Date.now() - 1000, phase: phaseAtDeadline(funding, raised) });
-    showToast("펀딩 기간이 끝났어요");
-  };
-
   const resolve = (r: Resolution) => {
     if (!funding) return;
     setFunding({ ...funding, phase: "done", resolution: r });
     setSheet(null);
     showToast(r.kind === "cancel" ? "모든 참여 결제가 승인 취소됐어요" : "🚚 배송 접수가 완료됐어요");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const loadPreset = (k: ScenarioKey) => {
-    setFunding(scenarioFunding(k, funding?.product));
-    setRole("owner");
-    setSheet(null);
-    setScreen("funding");
-    window.scrollTo(0, 0);
-  };
-
-  // 데모 링크용: /?scenario=active|achieved|under|done
-  useEffect(() => {
-    const k = new URLSearchParams(window.location.search).get("scenario");
-    if (SCENARIO_KEYS.includes(k as ScenarioKey)) loadPreset(k as ScenarioKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const reset = () => {
-    setFunding(null);
-    setSheet(null);
-    setScreen("shop");
-    window.scrollTo(0, 0);
   };
 
   /* -------------------------------- render -------------------------------- */
@@ -289,19 +243,9 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
         </>
       )}
 
-      {/* 고정 CTA(최대 약 114px)와 시나리오 버튼(바닥에서 160px까지)에 가려지지 않는 패딩 */}
-      <Footer className="pb-44" />
+      {/* 고정 CTA(최대 약 114px)에 가려지지 않는 패딩 */}
+      <Footer className="pb-32" />
 
-      {!sharedVisit && (
-        <ScenarioPanel
-          hasFunding={!!funding && screen === "funding"}
-          canAct={funding?.phase === "active"}
-          onPreset={loadPreset}
-          onRandomJoin={randomJoin}
-          onCloseNow={closeNow}
-          onReset={reset}
-        />
-      )}
       <Toast message={toast} />
     </main>
   );

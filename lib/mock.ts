@@ -66,39 +66,9 @@ export function createFunding(
   };
 }
 
-/** 시나리오 프리셋: 데모용으로 다양한 상태의 펀딩을 즉시 생성 */
-export type ScenarioKey = "active" | "achieved" | "under" | "done";
-export const SCENARIO_KEYS: ScenarioKey[] = ["active", "achieved", "under", "done"];
-
 export const SAVED_ADDRESS: ShippingAddress = {
   name: "김토스",
   phone: "010-1234-5678",
   address: "서울특별시 강남구 테헤란로 142",
   detail: "아크플레이스 12층",
 };
-
-export function scenarioFunding(key: ScenarioKey, product: Product = PRODUCTS[0]): Funding {
-  const base = createFunding(product, { title: "김토스의 생일 선물 펀딩" });
-  const g = base.goal;
-  // 대략적인 비율로 참여 금액을 만든 뒤 1천원 단위로 맞춤
-  const ratios: Record<ScenarioKey, number[]> = {
-    active: [0.15, 0.1, 0.2, 0.06, 0.12, 0.09],
-    achieved: [0.2, 0.15, 0.25, 0.1, 0.18],
-    under: [0.15, 0.1, 0.12, 0.06, 0.08],
-    done: [0.25, 0.1, 0.2, 0.15, 0.12, 0.08],
-  };
-  const amounts = ratios[key].map((r) => Math.round((g * r) / 1000) * 1000);
-  if (key === "achieved" || key === "done") amounts[amounts.length - 1] += g - amounts.reduce((a, b) => a + b, 0);
-  const participants = buildParticipants(amounts);
-
-  if (key === "active") return { ...base, deadline: Date.now() + 3 * DAY, participants };
-  if (key === "achieved") return { ...base, participants, phase: "achieved" };
-  if (key === "done")
-    return {
-      ...base,
-      participants,
-      phase: "done",
-      resolution: { kind: "gift", product, reason: "achieved", collected: g, address: SAVED_ADDRESS },
-    };
-  return { ...base, deadline: Date.now() - 1000, participants, phase: "under" };
-}
