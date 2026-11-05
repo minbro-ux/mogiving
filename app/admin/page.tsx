@@ -3,6 +3,7 @@ import { adminConfigured, isAdmin } from "@/lib/adminAuth";
 import { kstDateTime, toAdminView } from "@/lib/adminRows";
 import { won } from "@/lib/format";
 import { listSharesForAdmin } from "@/lib/shareStore";
+import { Footer } from "@/components/Footer";
 import { CopyButton } from "./CopyButton";
 
 export const dynamic = "force-dynamic";
@@ -132,14 +133,15 @@ export default async function AdminPage({ searchParams }: Props) {
           </tbody>
         </table>
       </div>
+      <Footer className="mt-8 pb-4" />
     </main>
   );
 }
 
 function LoginScreen({ error, configured }: { error: boolean; configured: boolean }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <form action="/api/admin/login" method="post" className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <main className="flex min-h-screen flex-col bg-gray-50 px-4">
+      <form action="/api/admin/login" method="post" className="m-auto w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="text-lg font-bold text-gray-900">🔒 운영자 전용</h1>
         <p className="mt-1 text-sm text-gray-500">관리자 비밀번호를 입력해 주세요.</p>
         {!configured && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">ADMIN_PASSWORD 환경변수가 설정되지 않아 잠겨 있어요.</p>}
@@ -155,6 +157,7 @@ function LoginScreen({ error, configured }: { error: boolean; configured: boolea
         {error && <p className="mt-2 text-xs text-red-600">비밀번호가 올바르지 않아요.</p>}
         <button className="mt-4 w-full rounded-lg bg-gray-900 py-2 text-sm font-semibold text-white hover:bg-gray-800">잠금 해제</button>
       </form>
+      <Footer className="mt-8 pb-4" />
     </main>
   );
 }

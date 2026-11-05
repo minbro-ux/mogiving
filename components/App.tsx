@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Footer } from "@/components/Footer";
 import { FundingScreen, type Role } from "@/components/FundingScreen";
 import { ParticipateSheet, ShareSheet } from "@/components/FundingSheets";
 import { ResolutionSheet } from "@/components/ResolutionSheet";
@@ -287,6 +288,9 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
           )}
         </>
       )}
+
+      {/* 고정 CTA(최대 약 114px)와 시나리오 버튼(바닥에서 160px까지)에 가려지지 않는 패딩 */}
+      <Footer className="pb-44" />
 
       {!sharedVisit && (
         <ScenarioPanel

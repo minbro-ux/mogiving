@@ -52,7 +52,7 @@ export function FundingScreen({
   const showNextRound = isOwner && (phase === "achieved" || resolution?.kind === "gift");
 
   return (
-    <div className="min-h-dvh bg-white pb-36">
+    <div className="min-h-dvh bg-white pb-8">
       {/* 상단 내비게이션 */}
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between bg-white/95 px-2 backdrop-blur">
         <button onClick={onBack} className="rounded-full p-2 text-grey-800 active:bg-grey-100" aria-label="선물 고르기로">
