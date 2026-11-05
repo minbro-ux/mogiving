@@ -6,7 +6,7 @@ import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
 import { type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, OptionField, OwnerNameField, PeriodPicker, SafetyNote, ShippingFields, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, OptionField, OwnerNameField, PeriodPicker, SafetyNote, ShippingFields, shippingStatus, toShipping } from "./FundingForm";
 import { LinkImportSheet } from "./LinkImportSheet";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 import { WishRequestSheet } from "./WishRequestSheet";
@@ -428,6 +428,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
         <span className="text-[22px] font-bold text-grey-900">{won(p.price)}</span>
         {p.originalPrice && <span className="text-[15px] text-grey-400 line-through">{won(p.originalPrice)}</span>}
       </div>
+      <FeeSummary basePrice={p.price} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />
       <OptionField value={option} onChange={setOption} />
       <PeriodPicker value={days} onChange={setDays} />

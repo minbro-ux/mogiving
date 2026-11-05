@@ -7,7 +7,7 @@ import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FormField, OptionField, OwnerNameField, PeriodPicker, PriceInput, SafetyNote, ShippingFields, inputClass, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceInput, SafetyNote, ShippingFields, inputClass, shippingStatus, toShipping } from "./FundingForm";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 
 /** 사진을 못 가져왔을 때 고를 수 있는 기본 대표 이미지 */
@@ -142,6 +142,7 @@ export function LinkImportSheet({
             </a>
           </div>
           <AutoFilledFields draft={draft} original={result.product} onChange={set} />
+          <FeeSummary basePrice={draft.price} />
         </>
       ) : (
         <>
@@ -161,9 +162,10 @@ export function LinkImportSheet({
               className={inputClass}
             />
           </FormField>
-          <FormField label="목표 금액">
+          <FormField label="선물 금액">
             <PriceInput value={draft.price} onChange={(price) => set({ price })} />
             <p className="mt-1.5 text-[12px] text-grey-500">쇼핑몰 판매가 또는 희망 가격을 입력해 주세요</p>
+            <FeeSummary basePrice={draft.price} />
           </FormField>
           <FormField label="대표 사진">
             <ImagePicker product={draft} onChange={set} className="!mt-0" />
@@ -293,7 +295,7 @@ function AutoFilledFields({ draft, original, onChange }: { draft: Product; origi
         <input value={draft.name} maxLength={60} onChange={(e) => onChange({ name: e.target.value })} className={inputClass} />
       </FormField>
       <FormField
-        label="목표 금액"
+        label="선물 금액"
         hint={
           priceChanged && (
             <button onClick={() => onChange({ price: original.price })} className="text-[13px] font-semibold text-grey-500">

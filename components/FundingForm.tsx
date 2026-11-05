@@ -1,6 +1,8 @@
 "use client";
 
 import { Ban, Lock, MapPin, PackageCheck } from "lucide-react";
+import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
+import { won } from "@/lib/format";
 import type { ShippingAddress } from "@/lib/types";
 
 /* ------------------------- 펀딩 개설 시트 공통 폼 요소 ------------------------- */
@@ -63,6 +65,31 @@ export function PriceInput({ value, onChange }: { value: number; onChange: (v: n
         className="min-w-0 flex-1 bg-transparent text-[16px] font-semibold text-grey-900 outline-none placeholder:text-grey-400"
       />
       <span className="text-[15px] text-grey-500">원</span>
+    </div>
+  );
+}
+
+/** 선물 금액 + 플랫폼 수수료 = 최종 목표 금액. 입력한 금액에 맞춰 바로 다시 계산한다 */
+export function FeeSummary({ basePrice }: { basePrice: number }) {
+  if (basePrice <= 0) return null;
+  return (
+    <div className="mt-3 rounded-2xl bg-toss-blue-light/60 p-4 text-[14px]">
+      <dl className="space-y-2">
+        <div className="flex justify-between text-grey-600">
+          <dt>선물 금액</dt>
+          <dd className="font-semibold text-grey-900">{won(basePrice)}</dd>
+        </div>
+        <div className="flex justify-between text-grey-600">
+          <dt>플랫폼 수수료 {FEE_PERCENT}%</dt>
+          <dd className="font-semibold text-grey-900">+ {won(feeAmount(basePrice))}</dd>
+        </div>
+        <div className="flex items-baseline justify-between border-t border-grey-200 pt-2">
+          <dt className="font-bold text-grey-900">최종 목표 금액</dt>
+          <dd className="text-[18px] font-bold text-toss-blue">{won(goalWithFee(basePrice))}</dd>
+        </div>
+      </dl>
+      <p className="mt-2.5 text-[12px] leading-relaxed text-grey-600">선물 결제 시 부족함이 없도록 결제 및 운영 수수료 {FEE_PERCENT}%가 포함된 금액으로 펀딩이 개설됩니다.</p>
+      <p className="mt-1 text-[12px] text-grey-500">최종 목표 금액은 100원 단위로 올림돼요.</p>
     </div>
   );
 }

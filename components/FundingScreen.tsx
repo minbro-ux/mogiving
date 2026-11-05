@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, EyeOff, Lock, Map as MapIcon, MapPin, Plus, Share2, ShieldCheck, Sparkles } from "lucide-react";
 import { dDay, percent, shortWon, timeAgo, won } from "@/lib/format";
+import { FEE_PERCENT, feeAmount } from "@/lib/fee";
 import { sumAmount } from "@/lib/mock";
 import { pieceInfo } from "@/lib/pieces";
 import type { Funding, GiftReason, Participant, Resolution, ShippingAddress } from "@/lib/types";
@@ -500,10 +501,11 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
           <PayRow k="친구들이 모아준 금액" v={won(r.collected)} />
           {r.extraPaid ? <PayRow k="내가 결제한 차액" v={won(r.extraPaid)} /> : null}
           <PayRow k="선물 가격" v={won(r.product.price)} />
+          <PayRow k={`플랫폼 수수료 ${FEE_PERCENT}%`} v={won(feeAmount(r.product.price))} />
         </dl>
 
         <p className="mt-3 flex items-center justify-center gap-1 text-[12px] text-grey-500">
-          <ShieldCheck size={13} /> 모인 금액은 현금이 아닌 선물 구매에만 쓰여요
+          <ShieldCheck size={13} /> 모인 금액은 현금이 아닌 선물 구매와 수수료에만 쓰여요
         </p>
       </div>
     </div>

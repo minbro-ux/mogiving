@@ -1,3 +1,4 @@
+import { goalWithFee } from "./fee";
 import type { Funding, Participant, Product, ShippingAddress } from "./types";
 
 /** 운영자 추천 큐레이션 (구매처 링크 포함) */
@@ -34,7 +35,8 @@ export function createFunding(
     id: `f-${Date.now()}`,
     product: option ? { ...product, option } : product,
     ...(opts.shipping ? { shipping: opts.shipping } : {}),
-    goal: product.price,
+    // product.price는 선물 원가(base_price), goal은 수수료를 더한 최종 목표 금액
+    goal: goalWithFee(product.price),
     title: opts.title || (round > 1 ? `내 생일 선물 펀딩 ${round}탄` : "내 생일 선물 펀딩"),
     ownerName: opts.ownerName.trim(),
     ownerMessage: opts.message || "올해 생일엔 이 선물이 정말 갖고 싶어요! 마음 모아주시면 감사히 받을게요 🙏",

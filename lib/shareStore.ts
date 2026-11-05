@@ -1,8 +1,12 @@
 import { createHash, randomBytes } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
+import { goalWithFee } from "./fee";
 import { type SharePayload, adminExtra, publicPayload } from "./share";
 import type { ShippingAddress } from "./types";
+
+/** goal은 integer 컬럼 */
+const MAX_GOAL_COLUMN = 2_147_483_647;
 
 /**
  * 짧은 공유 링크(/f/[shortId]) 저장소.
@@ -27,7 +31,7 @@ interface ShareStore {
   /** prev의 key가 맞으면 내용만 갱신하고 true. shipping이 없으면 기존 배송지는 그대로 둔다 */
   update(prev: ShortLink, payload: SharePayload, shipping?: ShippingAddress): Promise<boolean>;
   /** 새 id로 저장. id가 이미 있으면 false (호출 측에서 다른 id로 재시도) */
-  insert(id: string, keyHash: string, payload: SharePayload, shipping?: ShippingAddress): Promise<boolean>;
+  insert(id: string, keyHash: string, payload: SharePayload, shipping: ShippingAddress | undefined, goal: number | null): Promise<boolean>;
   /** 공개 요약(payload 컬럼)만 읽는다 */
   get(id: string): Promise<SharePayload | null>;
   /** 관리자 페이지용 전체 목록 (배송지 포함, 최신 등록순) */
@@ -63,11 +67,11 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
       if (!res.ok) throw new Error(`supabase update ${res.status}`);
       return ((await res.json()) as unknown[]).length > 0;
     },
-    async insert(id, keyHash, payload, shipping) {
+    async insert(id, keyHash, payload, shipping, goal) {
       const res = await call("", {
         method: "POST",
         headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ id, key_hash: keyHash, payload, shipping: shipping ?? null }),
+        body: JSON.stringify({ id, key_hash: keyHash, payload, shipping: shipping ?? null, goal }),
       });
       if (res.status === 409) return false;
       if (!res.ok) throw new Error(`supabase insert ${res.status}`);
@@ -178,14 +182,17 @@ function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: ShippingAddress): Promise<ShortLink> {
   // payload 컬럼에는 공개 필드 + 운영자 전용 정보(x)만 (그 밖에 클라이언트가 끼워 넣은 값은 화이트리스트로 걸러짐).
   // x는 읽을 때 publicPayload에서 다시 빠지므로 공유 화면에는 나가지 않는다
-  const x = adminExtra(payload);
-  const pub: SharePayload = { ...publicPayload(payload), ...(x ? { x } : {}) };
+  // 목표 금액은 클라이언트가 보낸 값을 믿지 않고 서버에서 선물 원가로 다시 계산한다
+  const goal = goalWithFee(Math.round(payload.p.price));
+  const pub: SharePayload = { ...publicPayload(payload), x: { ...(adminExtra(payload) ?? { a: 0 }), g: goal } };
+  const goalColumn = goal > 0 && goal <= MAX_GOAL_COLUMN ? goal : null;
   return exclusive(async () => {
+    // 갱신은 달성률 등 요약만 바꾼다. goal 컬럼은 개설 시 정한 값을 유지한다
     if (prev && SHORT_ID_RE.test(prev.id) && (await store.update(prev, pub, shipping))) return prev;
     const key = randomCode(24);
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = randomCode(ID_LENGTH);
-      if (await store.insert(id, hashKey(key), pub, shipping)) return { id, key };
+      if (await store.insert(id, hashKey(key), pub, shipping, goalColumn)) return { id, key };
     }
     throw new Error("could not allocate short id");
   });

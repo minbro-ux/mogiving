@@ -116,7 +116,7 @@ export function ResolutionSheet({
       >
         <ProductRow product={product} />
         <dl className="mt-5 space-y-3 rounded-2xl bg-grey-50 p-4 text-[15px]">
-          <Row k="선물 금액" v={won(goal)} />
+          <Row k="목표 금액 (수수료 포함)" v={won(goal)} />
           <Row k="친구들이 모아준 금액" v={`- ${won(raised)}`} />
           <div className="border-t border-grey-200 pt-3">
             <Row k={<b className="text-grey-900">내가 결제할 차액</b>} v={<b className="text-[17px] text-toss-blue">{won(shortfall)}</b>} />
@@ -215,7 +215,7 @@ export function ResolutionSheet({
 function NoCashNote() {
   return (
     <p className="flex items-center gap-1 pb-2 pt-4 text-[12px] text-grey-500">
-      <ShieldCheck size={13} className="shrink-0" /> 모인 금액은 현금으로 지급되지 않고 선물 구매에만 쓰여요
+      <ShieldCheck size={13} className="shrink-0" /> 모인 금액은 현금으로 지급되지 않고 선물 구매와 수수료에만 쓰여요
     </p>
   );
 }

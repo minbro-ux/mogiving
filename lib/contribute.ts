@@ -1,46 +1,11 @@
 import type { ContributionSummary, StoredContribution } from "./contributionStore";
 import type { Funding, Participant } from "./types";
 
-/**
- * 조각 선물 저장·동기화 (클라이언트 ↔ /api/contribute).
- * DB에서 온 참여 내역은 id를 "db-"로 시작해 로컬 데모 참여와 구분한다.
- */
+/** 조각 선물 동기화 (클라이언트 ↔ /api/contribute). 저장은 결제 승인 API에서만 일어난다 */
 
 export type { ContributionSummary };
 
-export type ContributeOk = { ok: true; contribution: StoredContribution; goal: number; collected: number; count: number };
-export type ContributeFail = { ok: false; code: string; message: string };
-
-const ERROR_TEXT: Record<string, string> = {
-  funding_closed: "이미 마감된 펀딩이에요. 화면을 새로고침해 주세요",
-  share_not_found: "펀딩 정보를 찾을 수 없어요",
-  invalid_amount: "참여 금액을 다시 확인해 주세요",
-  bad_nickname: "이름은 1~20자로 입력해 주세요",
-  bad_message: "메시지는 300자까지 쓸 수 있어요",
-};
-const DEFAULT_ERROR = "선물 내역을 저장하지 못했어요. 잠시 후 다시 시도해 주세요";
-
 const DB_PREFIX = "db-";
-export const isDbParticipant = (p: Participant) => p.id.startsWith(DB_PREFIX);
-
-/** 결제 완료 후 참여 내역·메시지를 서버에 저장 */
-export async function postContribution(shareId: string, input: { nickname: string; message: string; amount: number }): Promise<ContributeOk | ContributeFail> {
-  try {
-    const res = await fetch("/api/contribute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shareId, ...input }),
-    });
-    const body = (await res.json().catch(() => null)) as (ContributeOk | { ok: false; error?: string }) | null;
-    if (res.ok && body?.ok) return body;
-    const code = (body && !body.ok && body.error) || `http_${res.status}`;
-    console.error("[mogiving] 조각 선물 DB 저장 실패", { shareId, status: res.status, code, amount: input.amount });
-    return { ok: false, code, message: ERROR_TEXT[code] ?? DEFAULT_ERROR };
-  } catch (e) {
-    console.error("[mogiving] 조각 선물 저장 요청 실패 (네트워크)", { shareId, error: e });
-    return { ok: false, code: "network", message: "네트워크 연결을 확인하고 다시 시도해 주세요" };
-  }
-}
 
 /** DB 최신 누적 금액·참여 내역. ownerKey가 맞으면 닉네임·메시지 포함 */
 export async function fetchContributionSummary(shareId: string, ownerKey?: string | null): Promise<ContributionSummary | null> {
@@ -98,15 +63,10 @@ export function participantsFromSummary(s: ContributionSummary, mine: StoredCont
   });
 }
 
-/**
- * DB 요약을 펀딩 상태에 합친다.
- * keepLocal: 공유 링크 발급 전에 이 기기 화면에만 반영된 참여처럼 DB에 없는 로컬 참여를 남길지
- */
-export function applySummary(f: Funding, s: ContributionSummary, mine: StoredContribution[], keepLocal: boolean): Funding {
+/** DB 요약을 펀딩 상태에 합친다 */
+export function applySummary(f: Funding, s: ContributionSummary, mine: StoredContribution[]): Funding {
   const goal = s.goal && s.goal > 0 ? s.goal : f.goal;
-  const participants = [...participantsFromSummary(s, mine), ...(keepLocal ? f.participants.filter((p) => !isDbParticipant(p)) : [])].sort(
-    (a, b) => a.createdAt - b.createdAt,
-  );
+  const participants = participantsFromSummary(s, mine).sort((a, b) => a.createdAt - b.createdAt);
   const raised = participants.reduce((sum, p) => sum + p.amount, 0);
   const phase = f.phase === "active" && raised >= goal ? "achieved" : f.phase;
   return { ...f, goal, participants, phase };

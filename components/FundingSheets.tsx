@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Link2, Lock, MessageCircle, Minus, Plus, Send } from "lucide-react";
+import { Copy, Info, Link2, Lock, MessageCircle, Minus, Plus, Send } from "lucide-react";
+import { FEE_PERCENT } from "@/lib/fee";
 import { shortWon, won } from "@/lib/format";
 import { pieceInfo, piecesAmount } from "@/lib/pieces";
+import type { startTossPayment } from "@/lib/payment";
 import { copyText } from "@/lib/share";
-import type { Funding, Participant } from "@/lib/types";
+import type { Funding } from "@/lib/types";
 import { BottomSheet, Button, PieceGrid, ProductThumb, Segmented, Spinner } from "./ui";
 
 /* ------------------------------- 펀딩 참여 시트 ------------------------------- */
@@ -20,18 +22,15 @@ export function ParticipateSheet({
   remaining,
   onClose,
   onPay,
-  onDone,
 }: {
   open: boolean;
   funding: Funding;
   remaining: number;
   onClose: () => void;
-  /** 결제 후 참여 내역·메시지를 DB에 저장. 실패하면 사용자에게 보여줄 오류 문구, 성공하면 null */
-  onPay: (p: Omit<Participant, "id" | "createdAt">) => Promise<string | null>;
-  /** 완료 화면에서 '확인' */
-  onDone: () => void;
+  /** 주문을 만들고 토스페이먼츠 결제창을 연다. 완료 화면은 결제창에서 돌아온 /pay/success가 보여준다 */
+  onPay: (p: { nickname: string; message: string; amount: number }) => ReturnType<typeof startTossPayment>;
 }) {
-  const [step, setStep] = useState<"form" | "paying" | "done">("form");
+  const [step, setStep] = useState<"form" | "paying">("form");
   const [payError, setPayError] = useState<string | null>(null);
   const [mode, setMode] = useState<"piece" | "free">("piece");
   const [count, setCount] = useState(1);
@@ -51,6 +50,15 @@ export function ParticipateSheet({
     }
   }, [open]);
 
+  // 결제창에서 브라우저 '뒤로'로 돌아오면 멈춘 화면이 복원될 수 있어 입력 화면으로 되돌린다
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setStep("form");
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
   const pieces = pieceInfo(funding.goal, funding.goal - remaining);
   const amount = mode === "piece" ? piecesAmount(count, pieces.unit, remaining) : freeAmount;
   const valid = amount >= 1000 && nickname.trim() && message.trim();
@@ -58,50 +66,22 @@ export function ParticipateSheet({
   const pay = async () => {
     setStep("paying");
     setPayError(null);
-    // 결제 연출(1.4초)과 DB 저장을 함께 기다린다. 저장에 실패하면 완료 화면 대신 입력 화면에 오류를 보여준다
-    const [error] = await Promise.all([
-      onPay({ nickname: nickname.trim(), message: message.trim(), amount, isMe: true }).catch((e: unknown) => {
-        console.error("[mogiving] 조각 선물 처리 중 예외", e);
-        return "선물 내역을 저장하지 못했어요. 잠시 후 다시 시도해 주세요";
-      }),
-      new Promise((r) => setTimeout(r, 1400)),
-    ]);
-    if (error) {
-      setPayError(error);
-      setStep("form");
-      return;
-    }
-    setStep("done");
+    const r = await onPay({ nickname: nickname.trim(), message: message.trim(), amount });
+    // 결제창으로 이동 중이면 그대로 두고, 창을 닫았거나 실패하면 입력 화면으로 돌아온다
+    if (r.status === "redirecting") return;
+    if (r.status === "error") setPayError(r.message);
+    setStep("form");
   };
-
-  const finish = onDone;
 
   if (step === "paying")
     return (
       <BottomSheet open={open} onClose={() => {}} hideClose>
         <div className="flex flex-col items-center py-12">
           <Spinner className="!h-10 !w-10 !border-4" />
-          <p className="mt-6 text-[20px] font-bold text-grey-900">토스페이로 결제하고 있어요</p>
+          <p className="mt-6 text-[20px] font-bold text-grey-900">결제창을 열고 있어요</p>
           <p className="mt-1.5 text-[15px] text-grey-500">
             {mode === "piece" && `${count}조각 · `}
             {won(amount)}
-          </p>
-        </div>
-      </BottomSheet>
-    );
-
-  if (step === "done")
-    return (
-      <BottomSheet open={open} onClose={finish} hideClose footer={<Button onClick={finish}>확인</Button>}>
-        <div className="flex flex-col items-center py-8 text-center">
-          <div className="flex h-16 w-16 animate-pop items-center justify-center rounded-full bg-toss-blue text-white">
-            <Check size={34} strokeWidth={3} />
-          </div>
-          <p className="mt-6 text-[22px] font-bold text-grey-900">{mode === "piece" ? `${count}조각을 선물했어요` : "마음을 보냈어요"}</p>
-          <p className="mt-2 text-[15px] leading-relaxed text-grey-600">
-            {funding.ownerName}님에게 축하 메시지가 전달됐어요.
-            <br />
-            참여 금액과 메시지는 받는 분에게만 보여요.
           </p>
         </div>
       </BottomSheet>
@@ -119,11 +99,10 @@ export function ParticipateSheet({
         <Button onClick={pay} disabled={!valid}>
           {mode === "piece" ? (
             `총 ${pieces.total}조각 중 ${count}조각 선물하기`
+          ) : amount > 0 ? (
+            `${won(amount)} 결제하기`
           ) : (
-            <>
-              <span className="rounded bg-white px-1 text-[11px] font-black tracking-tight text-toss-blue">toss pay</span>
-              {amount > 0 ? `${won(amount)} 결제하기` : "결제하기"}
-            </>
+            "결제하기"
           )}
         </Button>
       }
@@ -253,6 +232,9 @@ export function ParticipateSheet({
       </div>
       <p className="mt-4 flex items-center gap-1 text-[12px] text-grey-500">
         <Lock size={12} /> 다른 친구들에게는 내 금액과 메시지가 보이지 않아요
+      </p>
+      <p className="mt-1.5 flex items-start gap-1 text-[12px] leading-relaxed text-grey-500">
+        <Info size={12} className="mt-[3px] shrink-0" /> 목표 금액에는 원활한 선물 전달을 위한 플랫폼 수수료 {FEE_PERCENT}%가 포함되어 있어요
       </p>
     </BottomSheet>
   );
