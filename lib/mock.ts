@@ -20,28 +20,7 @@ export const PRODUCTS: Product[] = [
 
 export const CATEGORIES = ["전체", "주얼리/패션", "디지털/가전", "뷰티/향수", "리빙/키친"];
 
-const FRIENDS: Pick<Participant, "nickname" | "message">[] = [
-  { nickname: "지민", message: "생일 진짜 축하해!! 올해도 꽃길만 걷자 🌸" },
-  { nickname: "서준", message: "에어팟 끼고 출근길 행복하길 ㅋㅋ" },
-  { nickname: "하은", message: "우리 팀 최고 막내 생일 축하해요 🎉" },
-  { nickname: "도윤", message: "늘 고마워! 맛있는 거 먹으러 가자" },
-  { nickname: "수아", message: "작지만 마음 보태요 💙" },
-  { nickname: "민재", message: "생축!! 이번엔 잃어버리지 말기 😂" },
-  { nickname: "유나", message: "행복한 하루 보내 🎂" },
-  { nickname: "현우", message: "형 생일 축하드려요!" },
-];
-
 const DAY = 86_400_000;
-
-export function buildParticipants(amounts: number[]): Participant[] {
-  const now = Date.now();
-  return amounts.map((amount, i) => ({
-    id: `seed-${i}`,
-    ...FRIENDS[i % FRIENDS.length],
-    amount,
-    createdAt: now - (amounts.length - i) * 1000 * 60 * 47,
-  }));
-}
 
 export const sumAmount = (ps: Participant[]) => ps.reduce((s, p) => s + p.amount, 0);
 
@@ -65,10 +44,3 @@ export function createFunding(
     round,
   };
 }
-
-export const SAVED_ADDRESS: ShippingAddress = {
-  name: "김토스",
-  phone: "010-1234-5678",
-  address: "서울특별시 강남구 테헤란로 142",
-  detail: "아크플레이스 12층",
-};

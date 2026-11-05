@@ -1,5 +1,5 @@
 import { percent } from "./format";
-import { PRODUCTS, buildParticipants, createFunding, sumAmount } from "./mock";
+import { PRODUCTS, createFunding, sumAmount } from "./mock";
 import { type ContributionSummary, participantsFromSummary } from "./contribute";
 import { linkOrigin } from "./site";
 import type { Funding, Product, ShippingAddress } from "./types";
@@ -163,7 +163,8 @@ export const shareDescription = (s: SharePayload) => `커피 한 잔 값으로 �
 
 /**
  * 공유 링크로 들어온 친구 화면용 펀딩 복원.
- * summary(DB 참여 내역)가 있으면 실제 금액으로, 없으면(긴 링크·저장소 장애) 달성률에 맞춘 데모 데이터로 채운다
+ * summary(DB 참여 내역)가 있으면 실제 금액으로 채운다.
+ * 없으면(긴 링크·저장소 장애) 참여 내역을 지어내지 않고 비워 두며, 링크의 달성률은 마감 여부 판단에만 쓴다
  */
 export function fundingFromShare(s: SharePayload, summary?: ContributionSummary | null): Funding {
   const curated = PRODUCTS.find((p) => p.id === s.p.id);
@@ -182,19 +183,13 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
       phase: summary.collected >= goal ? "achieved" : s.d <= Date.now() ? "under" : "active",
     };
   }
-  const raised = Math.round((base.goal * s.r) / 100 / 1000) * 1000;
-  const chunks = raised > 0 ? Math.max(1, Math.ceil(s.r / 15)) : 0;
-  const amounts = Array.from({ length: chunks }, (_, i) =>
-    i < chunks - 1 ? Math.floor(raised / chunks / 1000) * 1000 : raised - Math.floor(raised / chunks / 1000) * 1000 * (chunks - 1),
-  );
-  const achieved = s.r >= 100;
   return {
     ...base,
     id: s.id,
     ownerName: s.o,
     deadline: s.d,
-    participants: buildParticipants(amounts),
-    phase: achieved ? "achieved" : s.d <= Date.now() ? "under" : "active",
+    participants: [],
+    phase: s.r >= 100 ? "achieved" : s.d <= Date.now() ? "under" : "active",
   };
 }
 

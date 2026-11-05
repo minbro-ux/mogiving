@@ -15,13 +15,13 @@ async function resolveShare(token: string): Promise<SharePayload | null> {
   return SHORT_ID_RE.test(token) ? getShare(token) : decodeShareToken(token);
 }
 
-/** DB에 쌓인 실제 참여 내역 (긴 링크거나 조회 실패 시 null → 링크의 달성률로 대체) */
+/** DB에 쌓인 실제 참여 내역 (긴 링크거나 조회 실패 시 null → 참여 내역은 비우고, OG 설명은 링크의 달성률로 대체) */
 async function resolveSummary(token: string): Promise<ContributionSummary | null> {
   if (!SHORT_ID_RE.test(token)) return null;
   try {
     return await getContributionSummary(token);
   } catch (e) {
-    console.error("[f/[token]] 참여 내역 조회 실패 — 링크의 달성률로 대신 표시", { token, error: e instanceof Error ? e.message : String(e) });
+    console.error("[f/[token]] 참여 내역 조회 실패 — 참여 내역 없이 표시", { token, error: e instanceof Error ? e.message : String(e) });
     return null;
   }
 }

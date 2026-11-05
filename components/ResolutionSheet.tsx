@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Ban, ChevronLeft, ChevronRight, CreditCard, MapPin, ShieldCheck, Truck } from "lucide-react";
 import { won } from "@/lib/format";
-import { SAVED_ADDRESS } from "@/lib/mock";
 import type { Funding, Product, Resolution, ShippingAddress } from "@/lib/types";
 import { BottomSheet, Button, OptionRow, ProductThumb, Spinner } from "./ui";
 
@@ -198,14 +197,9 @@ export function ResolutionSheet({
       </div>
 
       <div className="mt-5">
-        <div className="flex items-center justify-between">
-          <p className="flex items-center gap-1 text-[14px] font-semibold text-grey-600">
-            <MapPin size={15} /> 배송지
-          </p>
-          <button onClick={() => setAddress(SAVED_ADDRESS)} className="text-[13px] font-semibold text-toss-blue">
-            저장된 배송지 불러오기
-          </button>
-        </div>
+        <p className="flex items-center gap-1 text-[14px] font-semibold text-grey-600">
+          <MapPin size={15} /> 배송지
+        </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <AddressInput value={address.name} onChange={(v) => setAddress({ ...address, name: v })} placeholder="받는 분" />
           <AddressInput value={address.phone} onChange={(v) => setAddress({ ...address, phone: v })} placeholder="연락처" inputMode="tel" />
