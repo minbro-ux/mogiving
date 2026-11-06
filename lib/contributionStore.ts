@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
+import type { ShippingAddress } from "./types";
 
 /**
  * 조각 선물(참여) 저장소 — 서버 전용.
@@ -18,7 +19,11 @@ export type ContributionSummary = {
   contributions: StoredContribution[];
   /** 미달 펀딩 전액 취소 진행 상태. amount는 참여자들이 결제한 금액 합계 */
   refund?: FundingRefundState;
+  /** 배송 접수 기록. 배송지는 주최자 key가 맞을 때만 담는다 */
+  delivery?: FundingDelivery | null;
 };
+
+export type FundingDelivery = { requestedAt: number; shipping?: ShippingAddress };
 
 export type FundingRefundState = { state: "none" | "in_progress" | "done"; amount: number; count: number };
 

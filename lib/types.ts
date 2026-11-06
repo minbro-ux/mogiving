@@ -50,23 +50,23 @@ export type GiftReason = "achieved" | "topup";
  * 펀딩 이후 정산 방식.
  * 현금 송금·포인트·교환권 없이, 원래 쇼핑몰 상품을 실물 배송하거나 전액 승인 취소만 한다.
  */
-export type Resolution =
-  | {
-      kind: "gift";
-      product: Product;
-      reason: GiftReason;
-      address: ShippingAddress;
-      /** 친구들이 모아준 금액 */
-      collected: number;
-      /** 수령자가 부족분으로 직접 결제한 금액 */
-      extraPaid?: number;
-    }
-  | { kind: "cancel"; amount: number; count: number };
+export type FundingGift = {
+  kind: "gift";
+  product: Product;
+  reason: GiftReason;
+  address: ShippingAddress;
+  /** 친구들이 모아준 금액 */
+  collected: number;
+  /** 수령자가 부족분으로 직접 결제한 금액 */
+  extraPaid?: number;
+};
+
+export type Resolution = FundingGift | { kind: "cancel"; amount: number; count: number };
 
 /**
  * active:   모금 중 (목표 금액을 넘는 결제는 받지 않음)
  * achieved: 목표 100% 달성 → 즉시 마감, 수령자가 배송지 입력
- * under:    기간 만료로 마감됐지만 목표 미달 → 차액 결제 또는 전액 취소
+ * under:    기간 만료로 마감됐지만 목표 미달 → 전액 취소 (처리하지 않으면 일정 기간 뒤 자동 환불)
  * done:     배송 접수 또는 취소 완료 (resolution 존재)
  */
 export type Phase = "active" | "achieved" | "under" | "done";

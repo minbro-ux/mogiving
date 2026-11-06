@@ -1,6 +1,6 @@
 import { percent } from "./format";
 import { PRODUCTS, createFunding, sumAmount } from "./mock";
-import { type ContributionSummary, participantsFromSummary } from "./contribute";
+import { type ContributionSummary, giftFromDelivery, participantsFromSummary } from "./contribute";
 import { linkOrigin } from "./site";
 import type { Funding, Product, ShippingAddress } from "./types";
 
@@ -202,7 +202,9 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
       goal,
       deadline: s.d,
       participants: participantsFromSummary(summary),
-      ...(summary.refund?.state === "done"
+      ...(summary.delivery
+        ? { phase: "done" as const, resolution: giftFromDelivery(product, summary.collected, summary.delivery.shipping) }
+        : summary.refund?.state === "done"
         ? { phase: "done" as const, resolution: { kind: "cancel" as const, amount: summary.refund.amount, count: summary.refund.count } }
         : { phase: summary.collected >= goal ? ("achieved" as const) : summary.refund?.state === "in_progress" || s.d <= Date.now() ? ("under" as const) : ("active" as const) }),
     };

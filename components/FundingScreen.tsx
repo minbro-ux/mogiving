@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, EyeOff, Lock, Map as MapIcon, MapPin, Plus, Share2, ShieldCheck, Sparkles } from "lucide-react";
 import { dDay, percent, shortWon, timeAgo, won } from "@/lib/format";
 import { FEE_PERCENT, feeAmount } from "@/lib/fee";
+import { AUTO_REFUND_DAYS } from "@/lib/policy";
 import { sumAmount } from "@/lib/mock";
 import { pieceInfo } from "@/lib/pieces";
 import type { Funding, GiftReason, Participant, Resolution, ShippingAddress } from "@/lib/types";
@@ -222,7 +223,7 @@ export function FundingScreen({
       <BottomCTA>
         {isOwner ? (
           needsChoice ? (
-            <Button onClick={onResolve}>선물 받는 방법 고르기</Button>
+            <Button onClick={onResolve}>{phase === "under" ? "전액 결제 취소하기" : "배송지 입력하기"}</Button>
           ) : canMakeCard ? (
             <Button onClick={() => setCardOpen(true)}>
               <Sparkles size={19} /> 지분 인증 카드 공유하기
@@ -397,15 +398,15 @@ function StatusCard({ funding, raised, isOwner, onResolve }: { funding: Funding;
       <p className="mt-1 text-[14px] leading-relaxed text-grey-700">
         {isOwner
           ? under
-            ? `목표까지 ${won(funding.goal - raised)}이 부족해요. 차액을 결제하고 받거나, 전액 결제를 취소할 수 있어요.`
-            : "펀딩이 마감됐어요. 배송지를 입력하면 쇼핑몰에 바로 주문을 넣어드려요."
+            ? `목표까지 ${won(funding.goal - raised)}이 부족해요. 지금 전액 취소할 수 있고, 취소하지 않아도 마감 ${AUTO_REFUND_DAYS}일 후부터 자동으로 전액 환불돼요.`
+            : "펀딩이 마감됐어요. 배송지를 입력해 접수하면 쇼핑몰 주문을 진행해 드려요."
           : under
-            ? `${funding.ownerName}님이 선물 받을 방법을 고르고 있어요.`
+            ? `목표 금액에 못 미쳐 참여한 결제는 전액 환불돼요. 늦어도 마감 ${AUTO_REFUND_DAYS}일 후부터 자동으로 처리돼요.`
             : `펀딩이 마감됐어요. ${funding.ownerName}님이 배송지를 입력하고 있어요.`}
       </p>
       {isOwner && (
         <Button size="md" className="mt-4" onClick={onResolve}>
-          {under ? "선물 받는 방법 고르기" : "배송지 입력하기"}
+          {under ? "전액 결제 취소하기" : "배송지 입력하기"}
         </Button>
       )}
     </div>
@@ -427,7 +428,7 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
         </div>
         <p className="mt-2 text-[14px] leading-relaxed text-grey-600">
           {isOwner
-            ? `참여한 ${r.count}명의 결제 ${won(r.amount)}가 모두 승인 취소됐어요. 카드사에 따라 3~5영업일 안에 반영돼요.`
+            ? `참여한 ${r.count}명의 결제 ${won(r.amount)}이 모두 승인 취소됐어요. 카드사에 따라 3~5영업일 안에 반영돼요.`
             : "펀딩이 취소되어 내 결제는 자동으로 승인 취소됐어요."}
         </p>
       </div>
@@ -440,7 +441,7 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
       <div className="rounded-[20px] bg-toss-green-light p-5 text-center">
         <p className="text-4xl">🎉</p>
         <p className="mt-2 text-[17px] font-bold text-grey-900">모두의 마음이 {ownerName}님께 선물로 전달됐어요</p>
-        <p className="mt-1 text-[14px] text-grey-600">선물 배송이 시작됐어요 · 함께해주셔서 고마워요</p>
+        <p className="mt-1 text-[14px] text-grey-600">선물 배송이 접수됐어요 · 함께해주셔서 고마워요</p>
       </div>
     );
 
@@ -456,7 +457,7 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
           {r.reason === "achieved" ? "축하해요! 펀딩이 100% 달성됐어요 🎉" : "선물 받을 준비가 끝났어요"}
         </p>
         <p className="mt-1.5 text-[14px] leading-relaxed text-white/85">
-          {r.product.mall}에 주문하고 배송을 접수했어요.
+          배송 접수가 끝났어요. {r.product.mall}에서 주문을 진행해 드릴게요.
         </p>
       </div>
 

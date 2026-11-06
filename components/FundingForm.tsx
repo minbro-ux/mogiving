@@ -14,7 +14,7 @@ export function SafetyNote() {
         <PackageCheck size={16} className="shrink-0 text-grey-500" /> 목표 달성 시 즉시 마감되고, 쇼핑몰에서 실물로 배송돼요
       </p>
       <p className="flex items-center gap-2">
-        <Ban size={16} className="shrink-0 text-grey-500" /> 목표 금액까지만 모이고, 미달 시 차액 결제 또는 전액 결제 취소를 골라요
+        <Ban size={16} className="shrink-0 text-grey-500" /> 목표 금액까지만 모이고, 미달 시 친구들의 결제는 전액 취소돼요
       </p>
     </div>
   );

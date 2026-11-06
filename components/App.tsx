@@ -9,10 +9,10 @@ import { ShopScreen } from "@/components/ShopScreen";
 import { Toast } from "@/components/ui";
 import { sumAmount } from "@/lib/mock";
 import { recallUploadedImage, rememberUploadedImage } from "@/lib/image";
-import { applySummary, fetchContributionSummary, recallMyContributions } from "@/lib/contribute";
+import { applySummary, fetchContributionSummary, recallMyContributions, requestDelivery } from "@/lib/contribute";
 import { refundFunding, startTossPayment } from "@/lib/payment";
 import { type ShortLink, fundingShareUrl, recallOwnerKey, registerShortLink, shareFunding, shortShareUrl, toStoredPayload } from "@/lib/share";
-import type { Funding, Phase, Resolution } from "@/lib/types";
+import type { Funding, Phase, Resolution, ShippingAddress } from "@/lib/types";
 
 type Screen = "shop" | "funding";
 type Sheet = "participate" | "share" | "resolve" | null;
@@ -164,7 +164,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
 
   const resolve = (r: Resolution) => {
     if (!funding) return;
-    setFunding({ ...funding, phase: "done", resolution: r });
+    setFunding({ ...funding, phase: "done", resolution: r, ...(r.kind === "gift" ? { shipping: r.address } : {}) });
     setSheet(null);
     showToast(r.kind === "cancel" ? "모든 참여 결제가 전액 취소됐어요" : "🚚 배송 접수가 완료됐어요");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -178,6 +178,15 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
     if (link && key) return refundFunding(link.id, key);
     if (funding.participants.length === 0) return { ok: true, amount: 0, count: 0 } as const;
     return { ok: false, message: "이 펀딩을 만든 기기에서만 취소할 수 있어요" } as const;
+  };
+
+  /** 달성 펀딩 배송 접수: 서버에 저장돼야 운영자가 발주할 수 있으므로 저장에 성공했을 때만 완료로 표시한다 */
+  const submitDelivery = async (address: ShippingAddress) => {
+    if (!funding) return { ok: false, message: "펀딩 정보를 찾을 수 없어요" } as const;
+    const link = shortLink?.fundingId === funding.id ? shortLink : null;
+    const key = link?.key ?? restoredKey;
+    if (link && key) return requestDelivery(link.id, key, address);
+    return { ok: false, message: "이 펀딩을 만든 기기에서만 접수할 수 있어요" } as const;
   };
 
   /* -------------------------------- render -------------------------------- */
@@ -219,7 +228,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
           />
           <ShareSheet open={sheet === "share"} link={shareUrl} onClose={() => setSheet(null)} onShare={share} onCopied={() => showToast("링크를 복사했어요")} />
           {needsChoice(funding.phase) && (
-            <ResolutionSheet open={sheet === "resolve"} funding={funding} raised={raised} onClose={() => setSheet(null)} onResolve={resolve} onCancelFunding={cancelFunding} />
+            <ResolutionSheet open={sheet === "resolve"} funding={funding} raised={raised} onClose={() => setSheet(null)} onResolve={resolve} onCancelFunding={cancelFunding} onRequestDelivery={submitDelivery} />
           )}
         </>
       )}

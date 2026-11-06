@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { ContributeError, type ContributionSummary, type FundingRefundState, getContributionSummary, saveContribution } from "./contributionStore";
 import { goalWithFee } from "./fee";
-import { getShare } from "./shareStore";
+import { getDelivery, getShare, listSharesForAdmin, verifyShareKey } from "./shareStore";
 
 /**
  * 토스페이먼츠 결제 주문 저장소 — 서버 전용.
@@ -67,6 +67,8 @@ interface PaymentStore {
   markFailed(orderId: string, code: string): Promise<void>;
   finalize(orderId: string, paymentKey: string): Promise<FinalizeResult>;
   setRefundStatus(orderId: string, status: RefundStatus): Promise<void>;
+  /** 이 시각 전에 마감됐고 목표에 못 미쳤으며 전액 환불이 끝나지 않은 펀딩 id */
+  listExpiredUnder(cutoffMs: number, limit: number): Promise<string[]>;
 }
 
 /* ------------------------------ Supabase (배포용) ------------------------------ */
@@ -121,6 +123,12 @@ function supabaseStore(url: string, serviceKey: string): PaymentStore {
     markApproved: (orderId, paymentKey) => patch("markApproved", `${order(orderId)}&status=eq.pending`, { status: "approved", payment_key: paymentKey }),
     markFailed: (orderId, code) => patch("markFailed", `${order(orderId)}&status=eq.pending`, { status: "failed", failure_code: code.slice(0, 80) }),
     setRefundStatus: (orderId, status) => patch("setRefundStatus", order(orderId), { refund_status: status }),
+
+    async listExpiredUnder(cutoffMs, limit) {
+      const res = await call("/rpc/mogiving_expired_under_fundings", { method: "POST", body: JSON.stringify({ p_cutoff_ms: cutoffMs, p_limit: limit }) });
+      if (!res.ok) throw await fail("listExpiredUnder", res);
+      return ((await res.json()) as { share_id: string }[]).map((r) => r.share_id);
+    },
 
     async finalize(orderId, paymentKey) {
       const res = await call("/rpc/mogiving_finalize_payment", { method: "POST", body: JSON.stringify({ p_order_id: orderId, p_payment_key: paymentKey }) });
@@ -238,6 +246,20 @@ function fileStore(): PaymentStore {
           await save(all);
         }
       }),
+    async listExpiredUnder(cutoffMs, limit) {
+      const orders = Object.values(await load());
+      const out: { id: string; d: number }[] = [];
+      for (const s of await listSharesForAdmin()) {
+        if (s.payload.d > cutoffMs || s.deliveryRequestedAt) continue;
+        const summary = await getContributionSummary(s.id);
+        if (!summary?.goal || summary.collected >= summary.goal) continue;
+        const pending = orders.some(
+          (o) => o.shareId === s.id && (o.status === "approved" || o.status === "finalized") && ((o.result?.refundStatus ?? "none") !== "done" || (o.result?.refundAmount ?? 0) < o.amount),
+        );
+        if (pending) out.push({ id: s.id, d: s.payload.d });
+      }
+      return out.sort((a, b) => a.d - b.d).slice(0, limit).map((x) => x.id);
+    },
     finalize: (orderId, paymentKey) =>
       exclusive(async () => {
         const all = await load();
@@ -297,6 +319,7 @@ export const finalizePayment = (orderId: string, paymentKey: string) => store.fi
 export const setRefundStatus = (orderId: string, status: RefundStatus) => store.setRefundStatus(orderId, status);
 export const listRefundableOrders = (shareId: string) => store.listRefundable(shareId);
 export const markOrderFullRefund = (orderId: string, amount: number) => store.markFullRefund(orderId, amount);
+export const listExpiredUnderFundings = (cutoffMs: number, limit: number) => store.listExpiredUnder(cutoffMs, limit);
 
 /**
  * 펀딩 전액 취소 상태. 모금액에 반영된 주문 중 하나라도 전액 환불 대상이면 취소가 시작된 펀딩이고,
@@ -310,10 +333,15 @@ export function refundStateOf(orders: RefundableOrder[]): FundingRefundState {
   return { state: done ? "done" : "in_progress", amount: recorded.reduce((s, o) => s + o.amount, 0), count: recorded.length };
 }
 
-/** 참여 요약 + 전액 취소 상태. 화면 동기화와 공유 화면이 함께 쓴다 */
+/** 참여 요약 + 전액 취소 상태 + 배송 접수. 화면 동기화와 공유 화면이 함께 쓴다 */
 export async function getFundingSummary(shareId: string, ownerKey?: string): Promise<ContributionSummary | null> {
   const summary = await getContributionSummary(shareId, ownerKey);
-  return summary && { ...summary, refund: refundStateOf(await store.listRefundable(shareId)) };
+  if (!summary) return null;
+  const stored = await getDelivery(shareId);
+  // 배송지는 주최자에게만 내보낸다
+  const isOwner = !!stored && !!ownerKey && (await verifyShareKey(shareId, ownerKey));
+  const delivery = stored && { requestedAt: stored.requestedAt, ...(isOwner && stored.shipping ? { shipping: stored.shipping } : {}) };
+  return { ...summary, refund: refundStateOf(await store.listRefundable(shareId)), delivery };
 }
 
 /** 지금 이 펀딩에 결제할 수 있는지. 펀딩을 읽지 못하면 null */

@@ -1,19 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Ban, ChevronLeft, ChevronRight, CreditCard, MapPin, ShieldCheck, Truck } from "lucide-react";
+import { MapPin, ShieldCheck, Truck } from "lucide-react";
 import { won } from "@/lib/format";
+import { AUTO_REFUND_DAYS } from "@/lib/policy";
 import type { Funding, Product, Resolution, ShippingAddress } from "@/lib/types";
-import { BottomSheet, Button, OptionRow, ProductThumb, Spinner } from "./ui";
+import { BottomSheet, Button, ProductThumb, Spinner } from "./ui";
 
-type Step = "choose" | "topup" | "cancel" | "address" | "processing";
+type Step = "cancel" | "address" | "processing";
 
 const EMPTY_ADDRESS: ShippingAddress = { name: "", phone: "", address: "", detail: "" };
 
+type ActionResult<T> = ({ ok: true } & T) | { ok: false; message: string };
+
 /**
  * 펀딩 결과 처리 모달 (현금 송금·포인트·교환권 없음)
- * - 달성(achieved): 배송지 입력 → 원래 쇼핑몰 상품 실물 배송
- * - 미달(under):    부족한 차액 직접 결제 후 배송 / 전액 승인 취소
+ * - 달성(achieved): 배송지 입력 → 서버에 배송 접수 → 운영자가 원래 쇼핑몰 상품을 발주
+ * - 미달(under):    전액 승인 취소. 처리하지 않아도 마감 후 일정 기간이 지나면 자동으로 전액 환불된다
  */
 export function ResolutionSheet({
   open,
@@ -22,6 +25,7 @@ export function ResolutionSheet({
   onClose,
   onResolve,
   onCancelFunding,
+  onRequestDelivery,
 }: {
   open: boolean;
   funding: Funding;
@@ -29,29 +33,29 @@ export function ResolutionSheet({
   onClose: () => void;
   onResolve: (r: Resolution) => void;
   /** 토스 결제를 실제로 전액 취소한다 */
-  onCancelFunding: () => Promise<{ ok: true; amount: number; count: number } | { ok: false; message: string }>;
+  onCancelFunding: () => Promise<ActionResult<{ amount: number; count: number }>>;
+  /** 배송 접수를 서버에 저장한다. 돌려준 address가 실제로 접수된 배송지다 */
+  onRequestDelivery: (address: ShippingAddress) => Promise<ActionResult<{ address: ShippingAddress }>>;
 }) {
   const { goal, product } = funding;
-  const achieved = funding.phase === "achieved";
-  const shortfall = Math.max(0, goal - raised);
-  const firstStep: Step = achieved ? "address" : "choose";
+  const firstStep: Step = funding.phase === "achieved" ? "address" : "cancel";
 
   const [step, setStep] = useState<Step>(firstStep);
   // 펀딩 등록 때 입력한 배송지가 있으면 미리 채워 둔다
   const initialAddress = funding.shipping ?? EMPTY_ADDRESS;
   const [address, setAddress] = useState<ShippingAddress>(initialAddress);
   const [processingText, setProcessingText] = useState("");
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setStep(firstStep);
     setAddress(initialAddress);
-    setCancelError(null);
+    setError(null);
   }, [open, firstStep, initialAddress]);
 
   const cancelFunding = async () => {
-    setCancelError(null);
+    setError(null);
     setProcessingText("결제를 전액 취소하고 있어요");
     setStep("processing");
     const r = await onCancelFunding();
@@ -59,20 +63,27 @@ export function ResolutionSheet({
       onResolve({ kind: "cancel", amount: r.amount, count: r.count });
       return;
     }
-    setCancelError(r.message);
+    setError(r.message);
     setStep("cancel");
   };
 
-  const commit = (r: Resolution, text: string) => {
-    setProcessingText(text);
+  const requestDelivery = async () => {
+    setError(null);
+    setProcessingText("배송을 접수하고 있어요");
     setStep("processing");
-    setTimeout(() => onResolve(r), 1200);
+    const r = await onRequestDelivery(address);
+    if (r.ok) {
+      onResolve({ kind: "gift", product, reason: "achieved", address: r.address, collected: raised });
+      return;
+    }
+    setError(r.message);
+    setStep("address");
   };
 
-  const back = (to: Step) => (
-    <button onClick={() => setStep(to)} className="-ml-1 mb-1 flex items-center text-[14px] font-medium text-grey-500">
-      <ChevronLeft size={18} /> 이전으로
-    </button>
+  const errorBox = error && (
+    <p role="alert" className="mt-3 rounded-xl bg-toss-red-light px-3.5 py-3 text-[14px] font-semibold text-toss-red">
+      {error}
+    </p>
   );
 
   if (step === "processing")
@@ -85,75 +96,16 @@ export function ResolutionSheet({
       </BottomSheet>
     );
 
-  /* ----------------------------- 미달: 방법 선택 ----------------------------- */
-  if (step === "choose")
-    return (
-      <BottomSheet
-        open={open}
-        onClose={onClose}
-        title="목표 금액에 조금 못 미쳤어요"
-        description={
-          <>
-            모인 금액 <b className="text-grey-900">{won(raised)}</b> · 부족한 금액 <b className="text-toss-red">{won(shortfall)}</b>
-          </>
-        }
-      >
-        <div className="mt-4 space-y-2.5">
-          <OptionRow
-            icon={<CreditCard size={20} className="text-toss-blue" />}
-            title="차액 결제하고 원래 선물 받기"
-            description={`${won(shortfall)}만 결제하면 원래 선물을 배송받아요`}
-            right={<ChevronRight size={20} className="text-grey-400" />}
-            onClick={() => setStep("topup")}
-          />
-          <OptionRow
-            icon={<Ban size={20} className="text-toss-red" />}
-            title="전액 결제 취소하기"
-            description="친구들의 결제가 모두 자동으로 승인 취소돼요"
-            right={<ChevronRight size={20} className="text-grey-400" />}
-            onClick={() => setStep("cancel")}
-          />
-        </div>
-        <NoCashNote />
-      </BottomSheet>
-    );
-
-  /* ----------------------------- 미달 ① 차액 결제 ----------------------------- */
-  if (step === "topup")
-    return (
-      <BottomSheet
-        open={open}
-        onClose={onClose}
-        title={
-          <>
-            {back("choose")}
-            차액만 결제하고 원래 선물 받을게요
-          </>
-        }
-        footer={<Button onClick={() => setStep("address")}>다음 · 배송지 입력</Button>}
-      >
-        <ProductRow product={product} />
-        <dl className="mt-5 space-y-3 rounded-2xl bg-grey-50 p-4 text-[15px]">
-          <Row k="목표 금액 (수수료 포함)" v={won(goal)} />
-          <Row k="친구들이 모아준 금액" v={`- ${won(raised)}`} />
-          <div className="border-t border-grey-200 pt-3">
-            <Row k={<b className="text-grey-900">내가 결제할 차액</b>} v={<b className="text-[17px] text-toss-blue">{won(shortfall)}</b>} />
-          </div>
-        </dl>
-        <p className="pb-2 pt-3 text-[13px] text-grey-500">차액은 배송지를 입력한 뒤 토스페이로 결제돼요.</p>
-      </BottomSheet>
-    );
-
-  /* --------------------------- 미달 ② 전액 승인 취소 --------------------------- */
+  /* ----------------------------- 미달: 전액 승인 취소 ----------------------------- */
   if (step === "cancel")
     return (
       <BottomSheet
         open={open}
         onClose={onClose}
-        title={
+        title="목표 금액에 못 미쳤어요"
+        description={
           <>
-            {back("choose")}
-            펀딩을 취소할까요?
+            모인 금액 <b className="text-grey-900">{won(raised)}</b> · 부족한 금액 <b className="text-toss-red">{won(Math.max(0, goal - raised))}</b>
           </>
         }
         footer={
@@ -162,16 +114,13 @@ export function ResolutionSheet({
           </Button>
         }
       >
-        {cancelError && (
-          <p role="alert" className="mt-3 rounded-xl bg-toss-red-light px-3.5 py-3 text-[14px] font-semibold text-toss-red">
-            {cancelError}
-          </p>
-        )}
+        {errorBox}
         <ul className="mt-4 space-y-3 rounded-2xl bg-grey-50 p-4 text-[14px] leading-relaxed text-grey-700">
           <li>
-            • 참여한 친구 {funding.participants.length}명의 결제 <b className="text-grey-900">{won(raised)}</b>가 모두 <b className="text-grey-900">자동 승인 취소</b>돼요.
+            • 참여한 친구 {funding.participants.length}명의 결제 <b className="text-grey-900">{won(raised)}</b>이 모두 <b className="text-grey-900">자동 승인 취소</b>돼요.
           </li>
           <li>• 수수료까지 포함해 친구들이 결제한 금액 그대로 100% 환불돼요.</li>
+          <li>• 지금 취소하지 않아도 마감 {AUTO_REFUND_DAYS}일 후부터 자동으로 전액 환불돼요.</li>
           <li>• 카드·토스페이 결제는 카드사에 따라 3~5영업일 안에 취소가 반영돼요.</li>
           <li>• 친구들이 남긴 롤링페이퍼는 그대로 남아요.</li>
         </ul>
@@ -179,40 +128,22 @@ export function ResolutionSheet({
       </BottomSheet>
     );
 
-  /* ------------------------------ 배송지 입력 ------------------------------ */
-  const extraPaid = achieved ? 0 : shortfall;
+  /* ------------------------------ 달성: 배송지 입력 ------------------------------ */
   const valid = address.name.trim() && address.phone.trim() && address.address.trim();
 
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
-      title={
-        achieved ? (
-          "축하해요! 100% 달성했어요 🎉"
-        ) : (
-          <>
-            {back("topup")}
-            어디로 보내드릴까요?
-          </>
-        )
-      }
-      description={achieved ? "배송지를 입력하면 쇼핑몰에 바로 주문을 넣어드려요." : undefined}
+      title="축하해요! 100% 달성했어요 🎉"
+      description="배송지를 입력해 접수하면 쇼핑몰 주문을 진행해 드려요."
       footer={
-        <Button
-          disabled={!valid}
-          onClick={() =>
-            commit(
-              { kind: "gift", product, reason: achieved ? "achieved" : "topup", address, collected: raised, extraPaid: extraPaid || undefined },
-              extraPaid ? "차액을 결제하고 배송을 접수하고 있어요" : "배송을 접수하고 있어요",
-            )
-          }
-        >
-          {extraPaid > 0 && <span className="rounded bg-white px-1 text-[11px] font-black tracking-tight text-toss-blue">toss pay</span>}
-          {extraPaid > 0 ? `${won(extraPaid)} 결제하고 배송 접수하기` : "배송 접수하기"}
+        <Button disabled={!valid} onClick={requestDelivery}>
+          배송 접수하기
         </Button>
       }
     >
+      {errorBox}
       <ProductRow product={product} />
 
       <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-toss-blue-light/60 px-4 py-3 text-[13px] text-grey-700">
@@ -225,12 +156,13 @@ export function ResolutionSheet({
           <MapPin size={15} /> 배송지
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <AddressInput value={address.name} onChange={(v) => setAddress({ ...address, name: v })} placeholder="받는 분" />
-          <AddressInput value={address.phone} onChange={(v) => setAddress({ ...address, phone: v })} placeholder="연락처" inputMode="tel" />
+          <AddressInput value={address.name} maxLength={20} onChange={(v) => setAddress({ ...address, name: v })} placeholder="받는 분" />
+          <AddressInput value={address.phone} maxLength={20} onChange={(v) => setAddress({ ...address, phone: v })} placeholder="연락처" inputMode="tel" />
         </div>
-        <AddressInput className="mt-2" value={address.address} onChange={(v) => setAddress({ ...address, address: v })} placeholder="주소" />
-        <AddressInput className="mt-2" value={address.detail} onChange={(v) => setAddress({ ...address, detail: v })} placeholder="상세 주소 (선택)" />
+        <AddressInput className="mt-2" value={address.address} maxLength={100} onChange={(v) => setAddress({ ...address, address: v })} placeholder="주소" />
+        <AddressInput className="mt-2" value={address.detail} maxLength={60} onChange={(v) => setAddress({ ...address, detail: v })} placeholder="상세 주소 (선택)" />
       </div>
+      <p className="mt-3 text-[13px] text-grey-500">접수 후에는 배송지를 바꿀 수 없으니 한 번 더 확인해 주세요.</p>
       <NoCashNote />
     </BottomSheet>
   );
@@ -264,30 +196,24 @@ function AddressInput({
   onChange,
   placeholder,
   inputMode,
+  maxLength,
   className = "",
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
   className?: string;
 }) {
   return (
     <input
       value={value}
       inputMode={inputMode}
+      maxLength={maxLength}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       className={`h-12 w-full rounded-xl bg-grey-100 px-4 text-[15px] text-grey-900 outline-none placeholder:text-grey-400 focus:ring-2 focus:ring-toss-blue ${className}`}
     />
-  );
-}
-
-function Row({ k, v }: { k: React.ReactNode; v: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between text-grey-600">
-      <dt>{k}</dt>
-      <dd className="font-semibold text-grey-900">{v}</dd>
-    </div>
   );
 }

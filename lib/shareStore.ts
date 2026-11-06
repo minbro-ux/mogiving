@@ -38,7 +38,12 @@ interface ShareStore {
   verifyKey(id: string, keyHash: string): Promise<boolean>;
   /** 관리자 페이지용 전체 목록 (배송지 포함, 최신 등록순) */
   list(): Promise<AdminShareRow[]>;
+  /** 아직 접수되지 않았을 때만 배송지와 접수 시각을 저장한다 */
+  requestDelivery(id: string, keyHash: string, shipping: ShippingAddress): Promise<void>;
+  getDelivery(id: string): Promise<StoredDelivery | null>;
 }
+
+export type StoredDelivery = { requestedAt: number; shipping: ShippingAddress | null };
 
 /** 관리자 페이지 전용 행. 서버에서만 만들고 /admin 화면·CSV로만 내보낸다 */
 export type AdminShareRow = {
@@ -47,6 +52,8 @@ export type AdminShareRow = {
   updatedAt: string;
   payload: SharePayload;
   shipping: ShippingAddress | null;
+  /** 주최자가 배송을 접수한 시각 (없으면 미접수) */
+  deliveryRequestedAt: string | null;
 };
 
 /* ------------------------------ Supabase (배포용) ------------------------------ */
@@ -102,6 +109,7 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
         updated_at: string;
         goal?: number | null;
         collected_amount?: number;
+        delivery_requested_at?: string | null;
       }[];
       return rows.map((r) => ({
         id: r.id,
@@ -113,14 +121,31 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
         shipping: r.shipping,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
+        deliveryRequestedAt: r.delivery_requested_at ?? null,
       }));
+    },
+    async requestDelivery(id, keyHash, shipping) {
+      const now = new Date().toISOString();
+      const res = await call(`?id=eq.${encodeURIComponent(id)}&key_hash=eq.${keyHash}&delivery_requested_at=is.null`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ shipping, delivery_requested_at: now, updated_at: now }),
+      });
+      if (!res.ok) throw new Error(`supabase requestDelivery ${res.status}`);
+    },
+    async getDelivery(id) {
+      // select=*: 접수 컬럼을 추가하는 마이그레이션 적용 전에도 펀딩 화면과 결제가 깨지지 않게
+      const res = await call(`?id=eq.${encodeURIComponent(id)}&select=*`, { method: "GET" });
+      if (!res.ok) throw new Error(`supabase getDelivery ${res.status}`);
+      const r = ((await res.json()) as { shipping: ShippingAddress | null; delivery_requested_at?: string | null }[])[0];
+      return r?.delivery_requested_at ? { requestedAt: Date.parse(r.delivery_requested_at), shipping: r.shipping } : null;
     },
   };
 }
 
 /* ------------------------------ 로컬 파일 (개발용) ------------------------------ */
 
-type FileEntry = { keyHash: string; payload: SharePayload; shipping?: ShippingAddress; createdAt?: number; updatedAt: number };
+type FileEntry = { keyHash: string; payload: SharePayload; shipping?: ShippingAddress; createdAt?: number; updatedAt: number; deliveryRequestedAt?: number };
 
 function fileStore(): ShareStore {
   const file = path.join(process.env.SHARE_STORE_DIR ?? path.join(process.cwd(), ".data"), "shares.json");
@@ -166,8 +191,20 @@ function fileStore(): ShareStore {
           shipping: e.shipping ?? null,
           createdAt: new Date(e.createdAt ?? e.updatedAt).toISOString(),
           updatedAt: new Date(e.updatedAt).toISOString(),
+          deliveryRequestedAt: e.deliveryRequestedAt ? new Date(e.deliveryRequestedAt).toISOString() : null,
         }))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    async requestDelivery(id, keyHash, shipping) {
+      const store = await load();
+      const e = store[id];
+      if (!e || e.keyHash !== keyHash || e.deliveryRequestedAt) return;
+      store[id] = { ...e, shipping, deliveryRequestedAt: Date.now(), updatedAt: Date.now() };
+      await save(store);
+    },
+    async getDelivery(id) {
+      const e = (await load())[id];
+      return e?.deliveryRequestedAt ? { requestedAt: e.deliveryRequestedAt, shipping: e.shipping ?? null } : null;
     },
   };
 }
@@ -198,7 +235,13 @@ export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: Sh
   const goalColumn = goal > 0 && goal <= MAX_GOAL_COLUMN ? goal : null;
   return exclusive(async () => {
     // 갱신은 달성률 등 요약만 바꾼다. goal 컬럼은 개설 시 정한 값을 유지한다
-    if (prev && SHORT_ID_RE.test(prev.id) && (await store.update(prev, pub, shipping))) return prev;
+    if (prev && SHORT_ID_RE.test(prev.id)) {
+      // 배송 접수 뒤에는 화면에 남아 있던 예전 배송지가 접수한 배송지를 덮어쓰지 않게 한다
+      const keepShipping = shipping && (await store.getDelivery(prev.id));
+      // 마감일은 개설 때 정한 값을 유지한다. 바꿀 수 있으면 미달 펀딩의 자동 환불을 미룰 수 있다
+      const stored = await store.get(prev.id);
+      if (await store.update(prev, stored ? { ...pub, d: stored.d } : pub, keepShipping ? undefined : shipping)) return prev;
+    }
     const key = randomCode(24);
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = randomCode(ID_LENGTH);
@@ -223,6 +266,17 @@ export async function getShare(id: string): Promise<SharePayload | null> {
 export function verifyShareKey(id: string, key: string): Promise<boolean> {
   if (!SHORT_ID_RE.test(id) || !key || key.length > 200) return Promise.resolve(false);
   return store.verifyKey(id, hashKey(key));
+}
+
+/** 배송 접수를 저장한다. 주최자 key 확인은 호출하는 쪽에서 먼저 한다 */
+export function requestDelivery(id: string, key: string, shipping: ShippingAddress) {
+  const { name, phone, address, detail, memo } = shipping;
+  return exclusive(() => store.requestDelivery(id, hashKey(key), { name, phone, address, detail, ...(memo ? { memo } : {}) }));
+}
+
+/** 배송 접수 기록. 배송지가 들어 있으므로 주최자가 아니면 호출한 쪽에서 빼고 내보낸다 */
+export function getDelivery(id: string) {
+  return store.getDelivery(id);
 }
 
 /** 관리자 페이지 전용: 배송지까지 포함한 전체 목록 (최신 등록순). 반드시 관리자 인증 뒤에만 호출할 것 */

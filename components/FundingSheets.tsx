@@ -5,6 +5,7 @@ import { Copy, Info, Link2, Lock, MessageCircle, Minus, Plus, Send } from "lucid
 import { FEE_PERCENT } from "@/lib/fee";
 import { shortWon, won } from "@/lib/format";
 import { pieceInfo, piecesAmount } from "@/lib/pieces";
+import { amountProblem } from "@/lib/policy";
 import type { startTossPayment } from "@/lib/payment";
 import { copyText } from "@/lib/share";
 import type { Funding } from "@/lib/types";
@@ -61,7 +62,8 @@ export function ParticipateSheet({
 
   const pieces = pieceInfo(funding.goal, funding.goal - remaining);
   const amount = mode === "piece" ? piecesAmount(count, pieces.unit, remaining) : freeAmount;
-  const valid = amount >= 1000 && nickname.trim() && message.trim();
+  const problem = amountProblem(amount, remaining);
+  const valid = !problem && nickname.trim() && message.trim();
 
   const pay = async () => {
     setStep("paying");
@@ -200,7 +202,8 @@ export function ParticipateSheet({
           {freeAmount === remaining && (
             <p className="mt-2 text-[13px] text-toss-blue">남은 금액을 모두 채우면 펀딩이 바로 성공으로 마감돼요.</p>
           )}
-          {freeAmount > 0 && freeAmount < 1000 && <p className="mt-2 text-[13px] text-toss-red">1,000원부터 참여할 수 있어요</p>}
+          {freeAmount > 0 && problem === "too_small" && <p className="mt-2 text-[13px] text-toss-red">1,000원부터 참여할 수 있어요</p>}
+          {problem === "leaves_too_little" && <p className="mt-2 text-[13px] text-toss-red">결제 후 100원 미만이 남지 않게 금액을 조금 바꿔 주세요</p>}
           <p className="mt-2 text-[12px] text-grey-500">목표 금액을 넘는 금액은 결제되지 않아요 · 최대 {won(remaining)}</p>
         </>
       )}

@@ -21,6 +21,8 @@ export type AdminView = {
   phone: string;
   address: string;
   memo: string;
+  /** 주최자가 배송을 접수한 시각. 있으면 발주 대상 */
+  deliveryRequestedAt: string | null;
 };
 
 export function toAdminView(r: AdminShareRow): AdminView {
@@ -48,6 +50,7 @@ export function toAdminView(r: AdminShareRow): AdminView {
     phone: s?.phone ?? "",
     address: s ? [s.address, s.detail].filter(Boolean).join(" ") : "",
     memo: s?.memo ?? "",
+    deliveryRequestedAt: r.deliveryRequestedAt,
   };
 }
 
@@ -65,7 +68,7 @@ function cell(v: string | number) {
 const phoneCell = (phone: string) => (/^[0-9-]+$/.test(phone) ? `"=""${phone}"""` : cell(phone));
 
 export function toOrderCsv(rows: AdminView[]) {
-  const header = ["등록일시", "펀딩ID", "주최자", "펀딩제목", "쇼핑몰", "브랜드", "상품명", "원본상품링크", "옵션", "목표금액", "모인금액", "달성률(%)", "수령인", "연락처", "주소", "배송메모"];
+  const header = ["등록일시", "펀딩ID", "주최자", "펀딩제목", "쇼핑몰", "브랜드", "상품명", "원본상품링크", "옵션", "목표금액", "모인금액", "달성률(%)", "배송접수일시", "수령인", "연락처", "주소", "배송메모"];
   const lines = rows.map((r) =>
     [
       cell(kstDateTime(r.createdAt)),
@@ -80,6 +83,7 @@ export function toOrderCsv(rows: AdminView[]) {
       cell(r.goal),
       cell(r.raised),
       cell(r.rate),
+      cell(r.deliveryRequestedAt ? kstDateTime(r.deliveryRequestedAt) : ""),
       cell(r.recipient),
       phoneCell(r.phone),
       cell(r.address),

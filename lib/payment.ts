@@ -8,6 +8,7 @@ import type { StoredContribution } from "./contributionStore";
 const PREPARE_ERRORS: Record<string, string> = {
   funding_closed: "이미 마감된 펀딩이에요. 화면을 새로고침해 주세요",
   amount_over_remaining: "그사이 남은 금액이 줄었어요. 화면을 새로고침한 뒤 다시 선택해 주세요",
+  amount_leaves_too_little: "결제 후 100원 미만이 남지 않게 금액을 조금 바꿔 주세요",
   share_not_found: "펀딩 정보를 찾을 수 없어요",
   invalid_amount: "참여 금액을 다시 확인해 주세요",
   bad_nickname: "이름은 1~20자로 입력해 주세요",

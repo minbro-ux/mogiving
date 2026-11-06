@@ -2,13 +2,13 @@ import { randomUUID } from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { goalWithFee } from "@/lib/fee";
 import { createPaymentOrder, fundingAvailability } from "@/lib/paymentStore";
+import { MIN_LAST_AMOUNT, amountProblem } from "@/lib/policy";
 import { SHORT_ID_RE } from "@/lib/shareStore";
 import { isTossConfigured } from "@/lib/tossServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MIN_AMOUNT = 1000;
 /** 선물 원가 입력 한도(1천만 원)에 수수료를 더한 금액까지 한 번에 결제할 수 있다 */
 const MAX_AMOUNT = goalWithFee(10_000_000);
 
@@ -35,13 +35,15 @@ export async function POST(req: NextRequest) {
   if (!SHORT_ID_RE.test(shareId)) return bad("bad_share_id");
   if (nickname.length < 1 || nickname.length > 20) return bad("bad_nickname");
   if (message.length > 300) return bad("bad_message");
-  if (!Number.isFinite(amount) || amount < MIN_AMOUNT || amount > MAX_AMOUNT) return bad("invalid_amount");
+  if (!Number.isFinite(amount) || amount < MIN_LAST_AMOUNT || amount > MAX_AMOUNT) return bad("invalid_amount");
 
   try {
     const funding = await fundingAvailability(shareId);
     if (!funding) return bad("share_not_found", 404);
     if (!funding.open) return bad("funding_closed", 409);
     if (amount > funding.remaining) return bad("amount_over_remaining", 409);
+    const problem = amountProblem(amount, funding.remaining);
+    if (problem) return bad(problem === "too_small" ? "invalid_amount" : "amount_leaves_too_little");
 
     const orderId = `mg_${randomUUID().replace(/-/g, "")}`;
     await createPaymentOrder({ orderId, shareId, nickname, message, amount });

@@ -113,6 +113,9 @@ export default async function AdminPage({ searchParams }: Props) {
                   {r.estimated && <div className="mt-1 text-[11px] text-gray-400">달성률 기준 추정치</div>}
                 </td>
                 <td className="px-3 py-3">
+                  {r.deliveryRequestedAt && (
+                    <div className="mb-1.5 inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">배송 접수 {kstDateTime(r.deliveryRequestedAt)} · 발주 필요</div>
+                  )}
                   {r.recipient || r.address ? (
                     <div className="space-y-0.5">
                       <div>
