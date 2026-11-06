@@ -158,7 +158,7 @@ export function FundingScreen({
             {funding.participants.length}명 참여 · 1조각 {shortWon(pieces.unit)}
           </span>
           <span>
-            {raised < funding.goal ? (isOwner ? `${won(funding.goal - raised)} 남았어요` : `${pieces.remaining}조각 남았어요`) : "목표 달성! 펀딩 마감"}
+            {cancelled ? "취소된 펀딩이에요" : raised < funding.goal ? (isOwner ? `${won(funding.goal - raised)} 남았어요` : `${pieces.remaining}조각 남았어요`) : "목표 달성! 펀딩 마감"}
           </span>
         </div>
       </section>

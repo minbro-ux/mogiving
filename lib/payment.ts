@@ -61,6 +61,34 @@ export async function startTossPayment(shareId: string, input: { nickname: strin
   }
 }
 
+const REFUND_ERRORS: Record<string, string> = {
+  forbidden: "이 펀딩을 만든 기기에서만 취소할 수 있어요",
+  funding_active: "아직 진행 중인 펀딩은 취소할 수 없어요",
+  funding_achieved: "목표 금액을 달성한 펀딩은 취소할 수 없어요",
+};
+const MAX_REFUND_ROUNDS = 6;
+
+/** 미달 펀딩 전액 취소. 서버가 시간 안에 다 끝내지 못하면 이어서 다시 요청한다 */
+export async function refundFunding(shareId: string, key: string): Promise<{ ok: true; amount: number; count: number } | { ok: false; message: string }> {
+  try {
+    for (let round = 0; round < MAX_REFUND_ROUNDS; round++) {
+      const res = await fetch("/api/payments/refund-funding", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shareId, key }) });
+      const body = (await res.json().catch(() => null)) as { ok: boolean; error?: string; finished?: boolean; failed?: number; remaining?: number; amount?: number; count?: number } | null;
+      if (!res.ok || !body?.ok) {
+        const code = body?.error;
+        console.error("[mogiving] 펀딩 전액 취소 실패", { shareId, status: res.status, code });
+        return { ok: false, message: (code && REFUND_ERRORS[code]) || "환불을 처리하지 못했어요. 잠시 후 다시 시도해 주세요" };
+      }
+      if (body.finished) return { ok: true, amount: body.amount ?? 0, count: body.count ?? 0 };
+      if (body.failed) return { ok: false, message: `결제 ${body.failed}건을 아직 취소하지 못했어요. 다시 시도하면 남은 결제만 이어서 취소해요` };
+    }
+    return { ok: false, message: "환불이 아직 끝나지 않았어요. 다시 시도하면 남은 결제만 이어서 취소해요" };
+  } catch (e) {
+    console.error("[mogiving] 펀딩 전액 취소 요청 실패 (네트워크)", e);
+    return { ok: false, message: "네트워크 연결을 확인하고 다시 시도해 주세요. 다시 시도해도 중복 환불되지 않아요" };
+  }
+}
+
 export type ConfirmOk = {
   ok: true;
   shareId: string;

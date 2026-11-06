@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Lock, MapPin, PackageCheck } from "lucide-react";
+import { AlertTriangle, Ban, Lock, MapPin, PackageCheck } from "lucide-react";
 import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
 import type { ShippingAddress } from "@/lib/types";
@@ -66,6 +66,16 @@ export function PriceInput({ value, onChange }: { value: number; onChange: (v: n
       />
       <span className="text-[15px] text-grey-500">원</span>
     </div>
+  );
+}
+
+/** 직접 입력한 선물 금액이 실제 판매가와 달라 생기는 배송 문제를 미리 안내한다 */
+export function PriceAccuracyNotice() {
+  return (
+    <p className="mt-1.5 flex items-start gap-1 text-[12px] leading-relaxed text-toss-orange">
+      <AlertTriangle size={13} className="mt-[2px] shrink-0" />
+      입력하신 금액이 실제 링크의 판매가와 다를 경우 펀딩 성공 후 선물 배송이 제한될 수 있으니 정확한 판매가를 입력해주세요.
+    </p>
   );
 }
 

@@ -21,12 +21,15 @@ export function ResolutionSheet({
   raised,
   onClose,
   onResolve,
+  onCancelFunding,
 }: {
   open: boolean;
   funding: Funding;
   raised: number;
   onClose: () => void;
   onResolve: (r: Resolution) => void;
+  /** 토스 결제를 실제로 전액 취소한다 */
+  onCancelFunding: () => Promise<{ ok: true; amount: number; count: number } | { ok: false; message: string }>;
 }) {
   const { goal, product } = funding;
   const achieved = funding.phase === "achieved";
@@ -38,12 +41,27 @@ export function ResolutionSheet({
   const initialAddress = funding.shipping ?? EMPTY_ADDRESS;
   const [address, setAddress] = useState<ShippingAddress>(initialAddress);
   const [processingText, setProcessingText] = useState("");
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setStep(firstStep);
     setAddress(initialAddress);
+    setCancelError(null);
   }, [open, firstStep, initialAddress]);
+
+  const cancelFunding = async () => {
+    setCancelError(null);
+    setProcessingText("결제를 전액 취소하고 있어요");
+    setStep("processing");
+    const r = await onCancelFunding();
+    if (r.ok) {
+      onResolve({ kind: "cancel", amount: r.amount, count: r.count });
+      return;
+    }
+    setCancelError(r.message);
+    setStep("cancel");
+  };
 
   const commit = (r: Resolution, text: string) => {
     setProcessingText(text);
@@ -139,15 +157,21 @@ export function ResolutionSheet({
           </>
         }
         footer={
-          <Button variant="danger" onClick={() => commit({ kind: "cancel", amount: raised, count: funding.participants.length }, "결제를 승인 취소하고 있어요")}>
+          <Button variant="danger" onClick={cancelFunding}>
             전액 결제 취소하기
           </Button>
         }
       >
+        {cancelError && (
+          <p role="alert" className="mt-3 rounded-xl bg-toss-red-light px-3.5 py-3 text-[14px] font-semibold text-toss-red">
+            {cancelError}
+          </p>
+        )}
         <ul className="mt-4 space-y-3 rounded-2xl bg-grey-50 p-4 text-[14px] leading-relaxed text-grey-700">
           <li>
             • 참여한 친구 {funding.participants.length}명의 결제 <b className="text-grey-900">{won(raised)}</b>가 모두 <b className="text-grey-900">자동 승인 취소</b>돼요.
           </li>
+          <li>• 수수료까지 포함해 친구들이 결제한 금액 그대로 100% 환불돼요.</li>
           <li>• 카드·토스페이 결제는 카드사에 따라 3~5영업일 안에 취소가 반영돼요.</li>
           <li>• 친구들이 남긴 롤링페이퍼는 그대로 남아요.</li>
         </ul>

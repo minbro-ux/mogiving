@@ -85,6 +85,13 @@ function PaySuccess() {
   }
 
   const { refundAmount, refundStatus, recordedAmount, shareId } = result;
+  // 나중에 이 화면을 다시 열었을 때: 주최자가 미달 펀딩을 취소한 결제
+  if (recordedAmount > 0 && refundAmount >= result.amount)
+    return (
+      <Result tone="warn" title="펀딩이 취소됐어요" shareId={shareId}>
+        {refundStatus === "done" ? `결제한 ${won(result.amount)}이 수수료까지 전액 취소됐어요. 카드사에 따라 3~5영업일 안에 반영돼요.` : `결제한 ${won(result.amount)}을 전액 취소하고 있어요.`}
+      </Result>
+    );
   if (refundAmount > 0 && refundStatus !== "done")
     return (
       <Result tone="warn" title="환불 처리가 필요해요" shareId={shareId}>

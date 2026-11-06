@@ -7,7 +7,7 @@ import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceInput, SafetyNote, ShippingFields, inputClass, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, SafetyNote, ShippingFields, inputClass, shippingStatus, toShipping } from "./FundingForm";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 
 /** 사진을 못 가져왔을 때 고를 수 있는 기본 대표 이미지 */
@@ -164,7 +164,7 @@ export function LinkImportSheet({
           </FormField>
           <FormField label="선물 금액">
             <PriceInput value={draft.price} onChange={(price) => set({ price })} />
-            <p className="mt-1.5 text-[12px] text-grey-500">쇼핑몰 판매가 또는 희망 가격을 입력해 주세요</p>
+            <PriceAccuracyNotice />
             <FeeSummary basePrice={draft.price} />
           </FormField>
           <FormField label="대표 사진">
@@ -305,6 +305,7 @@ function AutoFilledFields({ draft, original, onChange }: { draft: Product; origi
         }
       >
         <PriceInput value={draft.price} onChange={(price) => onChange({ price })} />
+        <PriceAccuracyNotice />
       </FormField>
     </>
   );

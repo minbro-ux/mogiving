@@ -6,7 +6,7 @@
 const API = "https://api.tosspayments.com/v1";
 const TIMEOUT_MS = 25_000;
 
-export type TossPayment = { paymentKey: string; orderId: string; status: string; totalAmount: number };
+export type TossPayment = { paymentKey: string; orderId: string; status: string; totalAmount: number; balanceAmount?: number };
 export type TossResult = { ok: true; payment: TossPayment } | { ok: false; status: number; code: string; message: string };
 
 export const isTossConfigured = () => !!process.env.TOSS_SECRET_KEY;
@@ -42,3 +42,11 @@ export const getTossPayment = (paymentKey: string) => call(`/payments/${encodeUR
 
 export const cancelTossPayment = (paymentKey: string, orderId: string, cancelAmount: number, cancelReason: string) =>
   call(`/payments/${encodeURIComponent(paymentKey)}/cancel`, { method: "POST", body: { cancelReason, cancelAmount }, idempotencyKey: `cancel-${orderId}` });
+
+/**
+ * 남은 결제 금액 전액 취소 (cancelAmount 없음 = 전액).
+ * 멱등키가 같으면 이전 실패 응답이 그대로 돌아오므로 재시도마다 새 키를 쓴다.
+ * 전액 취소를 중복 요청해도 ALREADY_CANCELED_PAYMENT가 될 뿐 이중 환불은 생기지 않는다.
+ */
+export const cancelTossPaymentFully = (paymentKey: string, orderId: string, cancelReason: string) =>
+  call(`/payments/${encodeURIComponent(paymentKey)}/cancel`, { method: "POST", body: { cancelReason }, idempotencyKey: `full-cancel-${orderId}-${Date.now()}` });

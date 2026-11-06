@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
-import { ContributeError, getContributionSummary, saveContribution } from "./contributionStore";
+import { ContributeError, type ContributionSummary, type FundingRefundState, getContributionSummary, saveContribution } from "./contributionStore";
 import { goalWithFee } from "./fee";
 import { getShare } from "./shareStore";
 
@@ -45,7 +45,21 @@ export class PaymentStoreError extends Error {
 
 type NewOrder = Pick<PaymentOrder, "orderId" | "shareId" | "nickname" | "message" | "amount">;
 
+/** 환불 판단에 쓰는 주문 상태 (승인 이후 주문만) */
+export type RefundableOrder = {
+  orderId: string;
+  amount: number;
+  status: "approved" | "finalized";
+  paymentKey: string | null;
+  recordedAmount: number;
+  refundAmount: number;
+  refundStatus: RefundStatus;
+};
+
 interface PaymentStore {
+  listRefundable(shareId: string): Promise<RefundableOrder[]>;
+  /** 전액 환불 대상으로 표시한다. 이후 이 펀딩은 새 결제를 받지 않는다 */
+  markFullRefund(orderId: string, amount: number): Promise<void>;
   create(order: NewOrder): Promise<void>;
   get(orderId: string): Promise<PaymentOrder | null>;
   markApproved(orderId: string, paymentKey: string): Promise<void>;
@@ -80,6 +94,14 @@ function supabaseStore(url: string, serviceKey: string): PaymentStore {
   };
 
   return {
+    async listRefundable(shareId) {
+      const res = await call(`/mogiving_payment_orders?share_id=eq.${encodeURIComponent(shareId)}&status=in.(approved,finalized)&select=order_id,amount,status,payment_key,recorded_amount,refund_amount,refund_status&order=created_at.asc&limit=1000`);
+      if (!res.ok) throw await fail("listRefundable", res);
+      const rows = (await res.json()) as { order_id: string; amount: number; status: RefundableOrder["status"]; payment_key: string | null; recorded_amount: number | null; refund_amount: number; refund_status: RefundStatus }[];
+      return rows.map((r) => ({ orderId: r.order_id, amount: r.amount, status: r.status, paymentKey: r.payment_key, recordedAmount: r.recorded_amount ?? 0, refundAmount: r.refund_amount, refundStatus: r.refund_status }));
+    },
+    markFullRefund: (orderId, amount) => patch("markFullRefund", order(orderId), { refund_amount: amount, refund_status: "required" }),
+
     async create({ orderId, shareId, nickname, message, amount }) {
       const res = await call("/mogiving_payment_orders", {
         method: "POST",
@@ -163,6 +185,27 @@ function fileStore(): PaymentStore {
   };
 
   return {
+    listRefundable: async (shareId) =>
+      Object.values(await load())
+        .filter((o) => o.shareId === shareId && (o.status === "approved" || o.status === "finalized"))
+        .map((o) => ({
+          orderId: o.orderId,
+          amount: o.amount,
+          status: o.status as RefundableOrder["status"],
+          paymentKey: o.paymentKey,
+          recordedAmount: o.result?.recordedAmount ?? 0,
+          refundAmount: o.result?.refundAmount ?? 0,
+          refundStatus: o.result?.refundStatus ?? "none",
+        })),
+    markFullRefund: (orderId, amount) =>
+      exclusive(async () => {
+        const all = await load();
+        const result = all[orderId]?.result;
+        if (result) {
+          all[orderId] = { ...all[orderId], result: { ...result, refundAmount: amount, refundStatus: "required" } };
+          await save(all);
+        }
+      }),
     create: (o) =>
       exclusive(async () => {
         const all = await load();
@@ -252,13 +295,40 @@ export const markOrderApproved = (orderId: string, paymentKey: string) => store.
 export const markOrderFailed = (orderId: string, code: string) => store.markFailed(orderId, code);
 export const finalizePayment = (orderId: string, paymentKey: string) => store.finalize(orderId, paymentKey);
 export const setRefundStatus = (orderId: string, status: RefundStatus) => store.setRefundStatus(orderId, status);
+export const listRefundableOrders = (shareId: string) => store.listRefundable(shareId);
+export const markOrderFullRefund = (orderId: string, amount: number) => store.markFullRefund(orderId, amount);
+
+/**
+ * 펀딩 전액 취소 상태. 모금액에 반영된 주문 중 하나라도 전액 환불 대상이면 취소가 시작된 펀딩이고,
+ * 그런 주문이 모두 환불 완료되면 끝난 것이다
+ */
+export function refundStateOf(orders: RefundableOrder[]): FundingRefundState {
+  const recorded = orders.filter((o) => o.recordedAmount > 0);
+  const full = recorded.filter((o) => o.refundAmount >= o.amount);
+  if (full.length === 0) return { state: "none", amount: 0, count: 0 };
+  const done = full.length === recorded.length && full.every((o) => o.refundStatus === "done");
+  return { state: done ? "done" : "in_progress", amount: recorded.reduce((s, o) => s + o.amount, 0), count: recorded.length };
+}
+
+/** 참여 요약 + 전액 취소 상태. 화면 동기화와 공유 화면이 함께 쓴다 */
+export async function getFundingSummary(shareId: string, ownerKey?: string): Promise<ContributionSummary | null> {
+  const summary = await getContributionSummary(shareId, ownerKey);
+  return summary && { ...summary, refund: refundStateOf(await store.listRefundable(shareId)) };
+}
 
 /** 지금 이 펀딩에 결제할 수 있는지. 펀딩을 읽지 못하면 null */
 export async function fundingAvailability(shareId: string) {
   const share = await getShare(shareId);
   if (!share) return null;
-  const summary = await getContributionSummary(shareId);
+  const summary = await getFundingSummary(shareId);
   if (!summary) return null;
   const goal = summary.goal && summary.goal > 0 ? summary.goal : goalWithFee(share.p.price);
-  return { open: share.d > Date.now() && summary.collected < goal, remaining: Math.max(0, goal - summary.collected), productName: share.p.name };
+  const cancelled = summary.refund?.state !== "none";
+  return {
+    open: !cancelled && share.d > Date.now() && summary.collected < goal,
+    closedByDeadline: share.d <= Date.now(),
+    achieved: summary.collected >= goal,
+    remaining: Math.max(0, goal - summary.collected),
+    productName: share.p.name,
+  };
 }

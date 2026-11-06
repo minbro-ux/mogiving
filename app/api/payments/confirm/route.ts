@@ -12,6 +12,8 @@ const bad = (error: string, status = 400) => NextResponse.json({ ok: false, erro
 /** 자동 환불. 실패하면 상태를 남겨 두고, 같은 주문을 다시 확인할 때 재시도한다 */
 async function settleRefund(order: PaymentOrder, paymentKey: string, r: FinalizeResult): Promise<FinalizeResult> {
   if (r.refundAmount <= 0 || r.refundStatus === "done") return r;
+  // 모금액에 반영된 주문의 전액 환불은 주최자의 펀딩 취소(refund-funding)가 맡는다
+  if (r.recordedAmount > 0 && r.refundAmount >= order.amount) return r;
   const res = await cancelTossPayment(paymentKey, order.orderId, r.refundAmount, "펀딩 마감 또는 목표 금액 초과로 자동 취소");
   const done = res.ok || res.code === "ALREADY_CANCELED_PAYMENT";
   if (!done) console.error("[api/payments/confirm] 자동 환불 실패 — 수동 확인 필요", { orderId: order.orderId, refundAmount: r.refundAmount, code: !res.ok ? res.code : undefined });

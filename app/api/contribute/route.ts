@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ContributeError, getContributionSummary } from "@/lib/contributionStore";
+import { ContributeError } from "@/lib/contributionStore";
+import { getFundingSummary } from "@/lib/paymentStore";
 import { SHORT_ID_RE } from "@/lib/shareStore";
 
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
   const shareId = req.nextUrl.searchParams.get("share") ?? "";
   if (!SHORT_ID_RE.test(shareId)) return bad("bad_share_id");
   try {
-    const s = await getContributionSummary(shareId, req.headers.get("x-share-key") ?? undefined);
+    const s = await getFundingSummary(shareId, req.headers.get("x-share-key") ?? undefined);
     if (!s) return bad("share_not_found", 404);
     return NextResponse.json({ ok: true, ...s }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {

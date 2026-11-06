@@ -10,8 +10,8 @@ import { Toast } from "@/components/ui";
 import { sumAmount } from "@/lib/mock";
 import { recallUploadedImage, rememberUploadedImage } from "@/lib/image";
 import { applySummary, fetchContributionSummary, recallMyContributions } from "@/lib/contribute";
-import { startTossPayment } from "@/lib/payment";
-import { type ShortLink, fundingShareUrl, registerShortLink, shareFunding, shortShareUrl, toStoredPayload } from "@/lib/share";
+import { refundFunding, startTossPayment } from "@/lib/payment";
+import { type ShortLink, fundingShareUrl, recallOwnerKey, registerShortLink, shareFunding, shortShareUrl, toStoredPayload } from "@/lib/share";
 import type { Funding, Phase, Resolution } from "@/lib/types";
 
 type Screen = "shop" | "funding";
@@ -30,8 +30,12 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   const [screen, setScreen] = useState<Screen>(initialFunding ? "funding" : "shop");
   const [funding, setFunding] = useState<Funding | null>(initialFunding ?? null);
   const [role, setRole] = useState<Role>(initialRole);
+  /** 이 기기에서 만든 펀딩을 링크로 다시 연 주최자의 비밀 key. 마감 후 환불·수령 처리는 여기서 이어간다 */
+  const [restoredKey, setRestoredKey] = useState<string | null>(null);
+  const restoredKeyRef = useRef(restoredKey);
+  restoredKeyRef.current = restoredKey;
   /** 공유 링크로 들어온 방문자: 시점 토글을 숨기고 친구 시점으로 고정 */
-  const sharedVisit = !!initialFunding && initialRole === "friend";
+  const sharedVisit = !!initialFunding && initialRole === "friend" && !restoredKey;
   const [sheet, setSheet] = useState<Sheet>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -43,6 +47,15 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   }, []);
 
   const raised = funding ? sumAmount(funding.participants) : 0;
+
+  // localStorage는 브라우저에만 있으므로 화면이 뜬 뒤에 확인한다
+  useEffect(() => {
+    if (!initialShareId || initialRole !== "friend") return;
+    const key = recallOwnerKey(initialShareId);
+    if (!key) return;
+    setRestoredKey(key);
+    setRole("owner");
+  }, [initialShareId, initialRole]);
 
   /* --------------------------- 짧은 공유 링크 (/f/[shortId]) --------------------------- */
 
@@ -121,7 +134,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
     let cancelled = false;
     const sync = async () => {
       if (document.visibilityState === "hidden") return;
-      const summary = await fetchContributionSummary(syncShareId, shortLinkRef.current?.key);
+      const summary = await fetchContributionSummary(syncShareId, shortLinkRef.current?.key ?? restoredKeyRef.current);
       if (cancelled || !summary) return;
       const fundingId = currentFundingId.current;
       setFunding((f) => (f && f.id === fundingId ? applySummary(f, summary, recallMyContributions(syncShareId)) : f));
@@ -134,7 +147,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", sync);
     };
-  }, [syncShareId, screen]);
+  }, [syncShareId, screen, restoredKey]);
 
   const share = async () => {
     if (!funding) return;
@@ -153,8 +166,18 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
     if (!funding) return;
     setFunding({ ...funding, phase: "done", resolution: r });
     setSheet(null);
-    showToast(r.kind === "cancel" ? "모든 참여 결제가 승인 취소됐어요" : "🚚 배송 접수가 완료됐어요");
+    showToast(r.kind === "cancel" ? "모든 참여 결제가 전액 취소됐어요" : "🚚 배송 접수가 완료됐어요");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  /** 미달 펀딩 취소: 서버에서 토스 결제를 전액 취소한다. 결제가 한 건도 없으면 취소할 것이 없다 */
+  const cancelFunding = async () => {
+    if (!funding) return { ok: false, message: "펀딩 정보를 찾을 수 없어요" } as const;
+    const link = shortLink?.fundingId === funding.id ? shortLink : null;
+    const key = link?.key ?? restoredKey;
+    if (link && key) return refundFunding(link.id, key);
+    if (funding.participants.length === 0) return { ok: true, amount: 0, count: 0 } as const;
+    return { ok: false, message: "이 펀딩을 만든 기기에서만 취소할 수 있어요" } as const;
   };
 
   /* -------------------------------- render -------------------------------- */
@@ -196,7 +219,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
           />
           <ShareSheet open={sheet === "share"} link={shareUrl} onClose={() => setSheet(null)} onShare={share} onCopied={() => showToast("링크를 복사했어요")} />
           {needsChoice(funding.phase) && (
-            <ResolutionSheet open={sheet === "resolve"} funding={funding} raised={raised} onClose={() => setSheet(null)} onResolve={resolve} />
+            <ResolutionSheet open={sheet === "resolve"} funding={funding} raised={raised} onClose={() => setSheet(null)} onResolve={resolve} onCancelFunding={cancelFunding} />
           )}
         </>
       )}

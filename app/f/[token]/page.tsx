@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { App } from "@/components/App";
 import { type SharePayload, decodeShareToken, fundingFromShare, shareDescription, shareTitle } from "@/lib/share";
-import { type ContributionSummary, getContributionSummary } from "@/lib/contributionStore";
+import type { ContributionSummary } from "@/lib/contributionStore";
+import { getFundingSummary } from "@/lib/paymentStore";
 import { SHORT_ID_RE, getShare } from "@/lib/shareStore";
 import { DEFAULT_OG_IMAGE, SITE_NAME } from "@/lib/site";
 
@@ -19,7 +20,7 @@ async function resolveShare(token: string): Promise<SharePayload | null> {
 async function resolveSummary(token: string): Promise<ContributionSummary | null> {
   if (!SHORT_ID_RE.test(token)) return null;
   try {
-    return await getContributionSummary(token);
+    return await getFundingSummary(token);
   } catch (e) {
     console.error("[f/[token]] 참여 내역 조회 실패 — 참여 내역 없이 표시", { token, error: e instanceof Error ? e.message : String(e) });
     return null;

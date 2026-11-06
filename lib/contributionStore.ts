@@ -16,7 +16,11 @@ export type ContributionSummary = {
   count: number;
   /** includePrivate가 아니면 nickname·message는 빈 문자열 (다른 친구의 메시지·이름은 주최자에게만) */
   contributions: StoredContribution[];
+  /** 미달 펀딩 전액 취소 진행 상태. amount는 참여자들이 결제한 금액 합계 */
+  refund?: FundingRefundState;
 };
+
+export type FundingRefundState = { state: "none" | "in_progress" | "done"; amount: number; count: number };
 
 export type ContributeResult = { contribution: StoredContribution; goal: number; collected: number; count: number };
 

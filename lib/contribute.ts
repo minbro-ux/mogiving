@@ -68,6 +68,8 @@ export function applySummary(f: Funding, s: ContributionSummary, mine: StoredCon
   const goal = s.goal && s.goal > 0 ? s.goal : f.goal;
   const participants = participantsFromSummary(s, mine).sort((a, b) => a.createdAt - b.createdAt);
   const raised = participants.reduce((sum, p) => sum + p.amount, 0);
+  // 서버에서 전액 취소가 끝난 펀딩은 어느 화면에서든 취소됨으로 보여준다
+  if (s.refund?.state === "done") return { ...f, goal, participants, phase: "done", resolution: { kind: "cancel", amount: s.refund.amount, count: s.refund.count } };
   const phase = f.phase === "active" && raised >= goal ? "achieved" : f.phase;
   return { ...f, goal, participants, phase };
 }

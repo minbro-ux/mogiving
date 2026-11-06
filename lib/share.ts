@@ -152,7 +152,30 @@ export async function registerShortLink(f: Funding, prev?: ShortLink | null): Pr
     });
     if (!res.ok) return null;
     const v = (await res.json()) as { id?: unknown; key?: unknown };
-    return typeof v.id === "string" && typeof v.key === "string" ? { id: v.id, key: v.key } : null;
+    if (typeof v.id !== "string" || typeof v.key !== "string") return null;
+    rememberOwnerKey(v.id, v.key);
+    return { id: v.id, key: v.key };
+  } catch {
+    return null;
+  }
+}
+
+/* -------------------- 주최자 비밀 key (펀딩을 만든 기기에만 보관) -------------------- */
+
+const ownerKeyName = (shareId: string) => `mogiving:owner-key:${shareId}`;
+
+/** 펀딩은 며칠 뒤 마감되므로, 주최자가 다시 들어와 결과를 처리할 수 있게 기기에 남겨 둔다 */
+function rememberOwnerKey(shareId: string, key: string) {
+  try {
+    localStorage.setItem(ownerKeyName(shareId), key);
+  } catch {
+    /* 저장 공간이 막힌 환경에서는 생략 */
+  }
+}
+
+export function recallOwnerKey(shareId: string): string | null {
+  try {
+    return localStorage.getItem(ownerKeyName(shareId));
   } catch {
     return null;
   }
@@ -179,7 +202,9 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
       goal,
       deadline: s.d,
       participants: participantsFromSummary(summary),
-      phase: summary.collected >= goal ? "achieved" : s.d <= Date.now() ? "under" : "active",
+      ...(summary.refund?.state === "done"
+        ? { phase: "done" as const, resolution: { kind: "cancel" as const, amount: summary.refund.amount, count: summary.refund.count } }
+        : { phase: summary.collected >= goal ? ("achieved" as const) : summary.refund?.state === "in_progress" || s.d <= Date.now() ? ("under" as const) : ("active" as const) }),
     };
   }
   return {

@@ -34,6 +34,8 @@ interface ShareStore {
   insert(id: string, keyHash: string, payload: SharePayload, shipping: ShippingAddress | undefined, goal: number | null): Promise<boolean>;
   /** 공개 요약(payload 컬럼)만 읽는다 */
   get(id: string): Promise<SharePayload | null>;
+  /** 주최자 비밀 key가 맞는지 */
+  verifyKey(id: string, keyHash: string): Promise<boolean>;
   /** 관리자 페이지용 전체 목록 (배송지 포함, 최신 등록순) */
   list(): Promise<AdminShareRow[]>;
 }
@@ -82,6 +84,11 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
       if (!res.ok) throw new Error(`supabase get ${res.status}`);
       const rows = (await res.json()) as { payload: SharePayload }[];
       return rows[0]?.payload ?? null;
+    },
+    async verifyKey(id, keyHash) {
+      const res = await call(`?id=eq.${encodeURIComponent(id)}&key_hash=eq.${keyHash}&select=id`, { method: "GET" });
+      if (!res.ok) throw new Error(`supabase verifyKey ${res.status}`);
+      return ((await res.json()) as unknown[]).length > 0;
     },
     async list() {
       // select=*: 참여 누적 컬럼(collected_amount)이 아직 없는 DB에서도 목록이 깨지지 않게
@@ -148,6 +155,9 @@ function fileStore(): ShareStore {
     async get(id) {
       return (await load())[id]?.payload ?? null;
     },
+    async verifyKey(id, keyHash) {
+      return (await load())[id]?.keyHash === keyHash;
+    },
     async list() {
       return Object.entries(await load())
         .map(([id, e]) => ({
@@ -207,6 +217,12 @@ export async function getShare(id: string): Promise<SharePayload | null> {
   } catch {
     return null;
   }
+}
+
+/** 주최자 비밀 key 확인. 저장소 오류는 호출한 쪽에서 처리한다 (권한 없음과 구분) */
+export function verifyShareKey(id: string, key: string): Promise<boolean> {
+  if (!SHORT_ID_RE.test(id) || !key || key.length > 200) return Promise.resolve(false);
+  return store.verifyKey(id, hashKey(key));
 }
 
 /** 관리자 페이지 전용: 배송지까지 포함한 전체 목록 (최신 등록순). 반드시 관리자 인증 뒤에만 호출할 것 */
