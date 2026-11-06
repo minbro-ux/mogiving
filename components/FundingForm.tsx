@@ -3,6 +3,7 @@
 import { AlertTriangle, Ban, Lock, MapPin, PackageCheck } from "lucide-react";
 import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
+import { FUNDING_PERIOD_DAYS } from "@/lib/policy";
 import type { ShippingAddress } from "@/lib/types";
 
 /* ------------------------- 펀딩 개설 시트 공통 폼 요소 ------------------------- */
@@ -24,7 +25,7 @@ export function PeriodPicker({ value, onChange }: { value: number; onChange: (d:
   return (
     <FormField label="모금 기간">
       <div className="grid grid-cols-3 gap-2">
-        {[3, 7, 14].map((d) => (
+        {FUNDING_PERIOD_DAYS.map((d) => (
           <button
             key={d}
             onClick={() => onChange(d)}

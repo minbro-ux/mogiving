@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { goalWithFee } from "./fee";
+import { maxDeadline } from "./policy";
 import { type SharePayload, adminExtra, publicPayload } from "./share";
 import type { ShippingAddress } from "./types";
 
@@ -242,10 +243,12 @@ export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: Sh
       const stored = await store.get(prev.id);
       if (await store.update(prev, stored ? { ...pub, d: stored.d } : pub, keepShipping ? undefined : shipping)) return prev;
     }
+    // 마감일이 멀수록 미달 펀딩의 자동 환불이 늦어지므로 개설할 때 상한을 넘지 못하게 한다
+    const created: SharePayload = { ...pub, d: Math.min(pub.d, maxDeadline()) };
     const key = randomCode(24);
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = randomCode(ID_LENGTH);
-      if (await store.insert(id, hashKey(key), pub, shipping, goalColumn)) return { id, key };
+      if (await store.insert(id, hashKey(key), created, shipping, goalColumn)) return { id, key };
     }
     throw new Error("could not allocate short id");
   });

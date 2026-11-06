@@ -4,6 +4,12 @@
 export const AUTO_REFUND_DAYS = 3;
 export const AUTO_REFUND_AFTER_MS = AUTO_REFUND_DAYS * 24 * 60 * 60 * 1000;
 
+/** 펀딩 개설 때 고를 수 있는 모금 기간(일) */
+export const FUNDING_PERIOD_DAYS = [3, 7, 14];
+
+/** 저장할 수 있는 마감일의 상한. 기기 시계 오차로 정상 개설이 줄어들지 않게 하루 여유를 둔다 */
+export const maxDeadline = (now = Date.now()) => now + (Math.max(...FUNDING_PERIOD_DAYS) + 1) * 24 * 60 * 60 * 1000;
+
 /** 일반 참여 최소 금액 */
 export const MIN_AMOUNT = 1000;
 /** 마지막 남은 금액을 채울 때의 최소 금액 (토스 카드 결제 최소 금액) */
