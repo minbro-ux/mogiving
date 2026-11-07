@@ -56,8 +56,20 @@ export type RefundableOrder = {
   refundStatus: RefundStatus;
 };
 
+/** 운영자가 확인해야 하는 환불 주문. 관리자 화면에 내보내므로 결제 키와 참여자 정보는 담지 않는다 */
+export type RefundAttention = {
+  orderId: string;
+  shareId: string;
+  amount: number;
+  refundAmount: number;
+  refundStatus: "required" | "failed";
+  updatedAt: string | null;
+};
+
 interface PaymentStore {
   listRefundable(shareId: string): Promise<RefundableOrder[]>;
+  /** 환불이 실패했거나 아직 끝나지 않은 주문 (오래된 순) */
+  listRefundAttention(limit: number): Promise<RefundAttention[]>;
   /** 전액 환불 대상으로 표시한다. 이후 이 펀딩은 새 결제를 받지 않는다 */
   markFullRefund(orderId: string, amount: number): Promise<void>;
   create(order: NewOrder): Promise<void>;
@@ -101,6 +113,12 @@ function supabaseStore(url: string, serviceKey: string): PaymentStore {
       if (!res.ok) throw await fail("listRefundable", res);
       const rows = (await res.json()) as { order_id: string; amount: number; status: RefundableOrder["status"]; payment_key: string | null; recorded_amount: number | null; refund_amount: number; refund_status: RefundStatus }[];
       return rows.map((r) => ({ orderId: r.order_id, amount: r.amount, status: r.status, paymentKey: r.payment_key, recordedAmount: r.recorded_amount ?? 0, refundAmount: r.refund_amount, refundStatus: r.refund_status }));
+    },
+    async listRefundAttention(limit) {
+      const res = await call(`/mogiving_payment_orders?refund_status=in.(required,failed)&select=order_id,share_id,amount,refund_amount,refund_status,updated_at&order=updated_at.asc&limit=${limit}`);
+      if (!res.ok) throw await fail("listRefundAttention", res);
+      const rows = (await res.json()) as { order_id: string; share_id: string; amount: number; refund_amount: number; refund_status: RefundAttention["refundStatus"]; updated_at: string }[];
+      return rows.map((r) => ({ orderId: r.order_id, shareId: r.share_id, amount: r.amount, refundAmount: r.refund_amount, refundStatus: r.refund_status, updatedAt: r.updated_at }));
     },
     markFullRefund: (orderId, amount) => patch("markFullRefund", order(orderId), { refund_amount: amount, refund_status: "required" }),
 
@@ -205,6 +223,14 @@ function fileStore(): PaymentStore {
           refundAmount: o.result?.refundAmount ?? 0,
           refundStatus: o.result?.refundStatus ?? "none",
         })),
+    listRefundAttention: async (limit) =>
+      Object.values(await load())
+        .flatMap((o) =>
+          o.result?.refundStatus === "required" || o.result?.refundStatus === "failed"
+            ? [{ orderId: o.orderId, shareId: o.shareId, amount: o.amount, refundAmount: o.result.refundAmount, refundStatus: o.result.refundStatus, updatedAt: null }]
+            : [],
+        )
+        .slice(0, limit),
     markFullRefund: (orderId, amount) =>
       exclusive(async () => {
         const all = await load();
@@ -320,6 +346,7 @@ export const setRefundStatus = (orderId: string, status: RefundStatus) => store.
 export const listRefundableOrders = (shareId: string) => store.listRefundable(shareId);
 export const markOrderFullRefund = (orderId: string, amount: number) => store.markFullRefund(orderId, amount);
 export const listExpiredUnderFundings = (cutoffMs: number, limit: number) => store.listExpiredUnder(cutoffMs, limit);
+export const listRefundAttention = (limit: number) => store.listRefundAttention(limit);
 
 /**
  * 펀딩 전액 취소 상태. 모금액에 반영된 주문 중 하나라도 전액 환불 대상이면 취소가 시작된 펀딩이고,

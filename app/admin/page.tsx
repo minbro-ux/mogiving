@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { adminConfigured, isAdmin } from "@/lib/adminAuth";
 import { kstDateTime, toAdminView } from "@/lib/adminRows";
 import { won } from "@/lib/format";
+import { type RefundAttention, listRefundAttention } from "@/lib/paymentStore";
 import { listSharesForAdmin } from "@/lib/shareStore";
 import { Footer } from "@/components/Footer";
 import { CopyButton } from "./CopyButton";
@@ -16,6 +17,8 @@ export const metadata: Metadata = {
   twitter: null,
 };
 
+const REFUND_ATTENTION_LIMIT = 100;
+
 type Props = { searchParams: { error?: string } };
 
 export default async function AdminPage({ searchParams }: Props) {
@@ -27,6 +30,16 @@ export default async function AdminPage({ searchParams }: Props) {
     rows = (await listSharesForAdmin()).map(toAdminView);
   } catch {
     loadError = true;
+  }
+
+  // 조회 실패를 "환불 문제 없음"으로 보이지 않게 따로 표시한다
+  let refunds: RefundAttention[] = [];
+  let refundLoadError = false;
+  try {
+    refunds = await listRefundAttention(REFUND_ATTENTION_LIMIT);
+  } catch (e) {
+    refundLoadError = true;
+    console.error("[admin] 환불 확인 목록 조회 실패", { error: e instanceof Error ? e.message : String(e), detail: (e as { detail?: unknown }).detail });
   }
 
   return (
@@ -47,6 +60,9 @@ export default async function AdminPage({ searchParams }: Props) {
       </header>
 
       {loadError && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">저장소에서 목록을 불러오지 못했어요. 잠시 후 새로고침해 주세요.</p>}
+
+      {refundLoadError && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">환불 상태를 불러오지 못했어요. 실패한 환불이 있을 수 있으니 새로고침해 주세요.</p>}
+      {refunds.length > 0 && <RefundAttentionPanel refunds={refunds} />}
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="w-full min-w-[1250px] text-left text-sm">
@@ -138,6 +154,50 @@ export default async function AdminPage({ searchParams }: Props) {
       </div>
       <Footer className="mt-8 pb-4" />
     </main>
+  );
+}
+
+function RefundAttentionPanel({ refunds }: { refunds: RefundAttention[] }) {
+  const failedCount = refunds.filter((r) => r.refundStatus === "failed").length;
+  return (
+    <section className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+      <h2 className="font-bold">
+        환불 확인 필요 {refunds.length}
+        {refunds.length >= REFUND_ATTENTION_LIMIT && "건 이상"}
+        {refunds.length < REFUND_ATTENTION_LIMIT && "건"} · 실패 {failedCount}건
+      </h2>
+      <p className="mt-1 text-xs text-red-800">마감이 지난 미달 펀딩은 매일 자동 환불 때 다시 시도해요. 목표를 달성한 펀딩의 초과 금액 환불은 자동으로 다시 시도되지 않으니 토스 결제 내역을 확인해 주세요.</p>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-xs">
+          <thead className="text-red-700">
+            <tr>
+              <th className="py-1 pr-3 font-semibold">상태</th>
+              <th className="py-1 pr-3 font-semibold">펀딩</th>
+              <th className="py-1 pr-3 font-semibold">주문번호</th>
+              <th className="py-1 pr-3 font-semibold">환불 금액</th>
+              <th className="py-1 font-semibold">마지막 변경</th>
+            </tr>
+          </thead>
+          <tbody>
+            {refunds.map((r) => (
+              <tr key={r.orderId} className="border-t border-red-100">
+                <td className="py-1.5 pr-3 font-semibold">{r.refundStatus === "failed" ? "실패" : "처리 대기"}</td>
+                <td className="py-1.5 pr-3">
+                  <a href={`/f/${r.shareId}`} target="_blank" rel="noreferrer" className="font-mono hover:underline">
+                    {r.shareId}
+                  </a>
+                </td>
+                <td className="py-1.5 pr-3 font-mono">{r.orderId}</td>
+                <td className="py-1.5 pr-3">
+                  {won(r.refundAmount)} <span className="text-red-700">/ 결제 {won(r.amount)}</span>
+                </td>
+                <td className="py-1.5">{r.updatedAt ? kstDateTime(r.updatedAt) : "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
