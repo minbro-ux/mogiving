@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, EyeOff, Lock, Map as MapIcon, MapPin, Plus, Share2, ShieldCheck, Sparkles } from "lucide-react";
+import { Ban, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, Lock, Map as MapIcon, MapPin, Plus, Share2, ShieldCheck, Sparkles } from "lucide-react";
 import { dDay, percent, shortWon, timeAgo, won } from "@/lib/format";
 import { FEE_PERCENT, feeAmount } from "@/lib/fee";
 import { AUTO_REFUND_DAYS } from "@/lib/policy";
@@ -18,7 +18,6 @@ export function FundingScreen({
   funding,
   role,
   onRoleChange,
-  onBack,
   onParticipate,
   onShare,
   onResolve,
@@ -29,7 +28,6 @@ export function FundingScreen({
   role: Role;
   /** 없으면 시점 토글을 숨긴다 (공유 링크 화면) */
   onRoleChange?: (r: Role) => void;
-  onBack: () => void;
   onParticipate: () => void;
   onShare: () => void;
   onResolve: () => void;
@@ -56,12 +54,11 @@ export function FundingScreen({
   return (
     <div className="min-h-dvh bg-white pb-8">
       {/* 상단 내비게이션 */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between bg-white/95 px-2 backdrop-blur">
-        <button onClick={onBack} className="rounded-full p-2 text-grey-800 active:bg-grey-100" aria-label="선물 고르기로">
-          <ChevronLeft size={26} />
-        </button>
-        <span className="text-[17px] font-bold text-grey-900">모기빙</span>
-        <button onClick={onShare} className="rounded-full p-2.5 text-grey-800 active:bg-grey-100" aria-label="공유">
+      {/* 공유 링크로 들어온 친구에게는 이 화면이 첫 화면이라 뒤로가기를 두지 않는다. 빈 왼쪽 칸은 타이틀을 가운데에 두기 위한 자리 */}
+      <header className="sticky top-0 z-20 grid h-14 grid-cols-[44px_1fr_44px] items-center bg-white/95 px-2 backdrop-blur">
+        <span aria-hidden />
+        <span className="text-center text-[17px] font-bold text-grey-900">모기빙</span>
+        <button onClick={onShare} className="justify-self-end rounded-full p-2.5 text-grey-800 active:bg-grey-100" aria-label="공유">
           <Share2 size={21} />
         </button>
       </header>

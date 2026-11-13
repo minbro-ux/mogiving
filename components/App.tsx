@@ -208,7 +208,6 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
                     showToast(r === "owner" ? "받는 사람(나)의 화면이에요" : "링크를 받은 친구의 화면이에요");
                   }
             }
-            onBack={() => setScreen("shop")}
             onParticipate={() => setSheet("participate")}
             onShare={share}
             onResolve={() => setSheet("resolve")}
