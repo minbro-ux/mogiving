@@ -63,7 +63,7 @@ export const PRODUCTS: Product[] = [
     price: 359000,
     emoji: "🧥",
     bg: "#FFFFFF",
-    category: "주얼리/패션",
+    category: "패션/의류",
     mall: "K-Village",
     url: "https://www.k-village.co.kr/goods/KMU26543BH",
     // 원본 이미지가 3MB(1500x2000)라 케이빌리지 CDN의 800x800 리사이즈본을 직접 저장해 사용
@@ -84,7 +84,7 @@ export const PRODUCTS: Product[] = [
   { id: "p8", brand: "Apple", name: "아이패드 에어 11 M2 Wi-Fi 128GB", price: 899000, originalPrice: 929000, emoji: "📱", bg: "#ECEFF8", category: "디지털/가전", mall: "쿠팡", url: "https://www.coupang.com/vp/products/8012230", rating: 4.9, reviews: 6420 },
 ].map((p) => ({ ...p, curated: true }));
 
-export const CATEGORIES = ["전체", "주얼리/패션", "디지털/가전", "뷰티/향수", "리빙/키친"];
+export const CATEGORIES = ["전체", "주얼리/패션", "패션/의류", "디지털/가전", "뷰티/향수", "리빙/키친"];
 
 const DAY = 86_400_000;
 
