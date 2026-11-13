@@ -7,7 +7,7 @@ import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, SafetyNote, ShippingFields, inputClass, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, PurposeFields, SafetyNote, ShippingFields, inputClass, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 
 /** 사진을 못 가져왔을 때 고를 수 있는 기본 대표 이미지 */
@@ -53,6 +53,7 @@ export function LinkImportSheet({
   const [days, setDays] = useState(7);
   const [option, setOption] = useState("");
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
+  const [purpose, setPurpose] = useState(() => purposeDraft(undefined, round));
   const prefetchedRef = useRef(prefetched);
   prefetchedRef.current = prefetched;
 
@@ -64,7 +65,8 @@ export function LinkImportSheet({
     setUrl(link?.url ?? "");
     setOption("");
     setShipping(EMPTY_SHIPPING);
-  }, [link]);
+    setPurpose(purposeDraft(undefined, round));
+  }, [link, round]);
 
   useEffect(() => {
     if (!target) return;
@@ -115,7 +117,7 @@ export function LinkImportSheet({
   const create = () => {
     if (!parsedUrl) return;
     const mall = parsedUrl.mall ?? draft.mall;
-    onCreate(createFunding({ ...draft, url: parsedUrl.url, mall, brand: draft.brand || mall }, { ownerName, days, round, option, shipping: toShipping(shipping) }));
+    onCreate(createFunding({ ...draft, url: parsedUrl.url, mall, brand: draft.brand || mall }, { ...purposeText(purpose, round), ownerName, days, round, option, shipping: toShipping(shipping) }));
   };
 
   return (
@@ -173,6 +175,7 @@ export function LinkImportSheet({
         </>
       )}
 
+      <PurposeFields value={purpose} round={round} onChange={setPurpose} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />
       <OptionField value={option} onChange={setOption} />
       <PeriodPicker value={days} onChange={setDays} />

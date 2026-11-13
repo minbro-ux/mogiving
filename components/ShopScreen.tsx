@@ -6,7 +6,7 @@ import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
 import { type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FeeSummary, OptionField, OwnerNameField, PeriodPicker, SafetyNote, ShippingFields, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, OptionField, OwnerNameField, PeriodPicker, PurposeFields, SafetyNote, ShippingFields, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
 import { LinkImportSheet } from "./LinkImportSheet";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 import { WishRequestSheet } from "./WishRequestSheet";
@@ -399,6 +399,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
   const [days, setDays] = useState(7);
   const [option, setOption] = useState("");
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
+  const [purpose, setPurpose] = useState(() => purposeDraft());
   if (!p) return null;
   const rate = discountRate(p.price, p.originalPrice);
   return (
@@ -408,7 +409,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
       footer={
         <Button
           disabled={!ownerName.trim() || shippingStatus(shipping) === "partial"}
-          onClick={() => onCreate(createFunding(p, { ownerName, days, option, shipping: toShipping(shipping) }))}
+          onClick={() => onCreate(createFunding(p, { ...purposeText(purpose), ownerName, days, option, shipping: toShipping(shipping) }))}
         >
           <Gift size={20} /> 이 추천 상품으로 펀딩 열기
         </Button>
@@ -429,6 +430,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
         {p.originalPrice && <span className="text-[15px] text-grey-400 line-through">{won(p.originalPrice)}</span>}
       </div>
       <FeeSummary basePrice={p.price} />
+      <PurposeFields value={purpose} onChange={setPurpose} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />
       <OptionField value={option} onChange={setOption} />
       <PeriodPicker value={days} onChange={setDays} />

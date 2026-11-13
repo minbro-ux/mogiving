@@ -4,6 +4,7 @@ import { AlertTriangle, Ban, Lock, MapPin, PackageCheck } from "lucide-react";
 import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
 import { FUNDING_PERIOD_DAYS } from "@/lib/policy";
+import { DEFAULT_PURPOSE, FUNDING_PURPOSES, type FundingPurpose, MESSAGE_MAX, TITLE_MAX, presetTitle, purposePreset } from "@/lib/purpose";
 import type { ShippingAddress } from "@/lib/types";
 import { PostcodeFields, cleanZonecode } from "./AddressSearch";
 
@@ -103,6 +104,68 @@ export function FeeSummary({ basePrice }: { basePrice: number }) {
       <p className="mt-2.5 text-[12px] leading-relaxed text-grey-600">선물 결제 시 부족함이 없도록 결제 및 운영 수수료 {FEE_PERCENT}%가 포함된 금액으로 펀딩이 개설됩니다.</p>
       <p className="mt-1 text-[12px] text-grey-500">최종 목표 금액은 100원 단위로 올림돼요.</p>
     </div>
+  );
+}
+
+/* ---------------------------- 목적 · 제목 · 한마디 ---------------------------- */
+
+export type PurposeDraft = { purpose: FundingPurpose; title: string; message: string };
+
+/** 목적을 고른 직후의 기본 문구. 2탄 이상이면 제목 뒤에 회차가 붙는다 */
+export const purposeDraft = (purpose: FundingPurpose = DEFAULT_PURPOSE, round = 1): PurposeDraft => ({
+  purpose,
+  title: presetTitle(purpose, round),
+  message: purposePreset(purpose).message,
+});
+
+/** 저장용 제목·한마디. 입력칸을 비워 두면 고른 목적의 기본 문구로 채운다 */
+export const purposeText = (d: PurposeDraft, round = 1) => ({
+  title: d.title.trim() || presetTitle(d.purpose, round),
+  message: d.message.trim() || purposePreset(d.purpose).message,
+});
+
+/** 선물 목적 칩 + 제목·한마디. 칩을 누르면 두 칸이 그 목적의 기본 문구로 바뀌고, 이후 자유롭게 고쳐 쓸 수 있다 */
+export function PurposeFields({ value, round = 1, onChange }: { value: PurposeDraft; round?: number; onChange: (v: PurposeDraft) => void }) {
+  return (
+    <>
+      <FormField label="어떤 선물인가요?">
+        <div className="flex flex-wrap gap-2">
+          {FUNDING_PURPOSES.map((p) => {
+            const on = value.purpose === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChange(purposeDraft(p.id, round))}
+                className={`h-9 rounded-full px-3.5 text-[14px] font-semibold transition ${on ? "bg-toss-blue text-white" : "bg-grey-100 text-grey-600"}`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      </FormField>
+      <FormField label="펀딩 제목">
+        <input
+          value={value.title}
+          maxLength={TITLE_MAX}
+          onChange={(e) => onChange({ ...value, title: e.target.value })}
+          placeholder={presetTitle(value.purpose, round)}
+          className={inputClass}
+        />
+      </FormField>
+      <FormField label="친구들에게 한마디" hint={<span className="text-[12px] text-grey-400">{value.message.length}/{MESSAGE_MAX}</span>}>
+        <textarea
+          value={value.message}
+          rows={3}
+          maxLength={MESSAGE_MAX}
+          onChange={(e) => onChange({ ...value, message: e.target.value })}
+          placeholder={purposePreset(value.purpose).message}
+          className="w-full resize-none rounded-xl bg-grey-100 px-4 py-3 text-[16px] text-grey-900 outline-none placeholder:text-grey-400 focus:ring-2 focus:ring-toss-blue"
+        />
+      </FormField>
+    </>
   );
 }
 

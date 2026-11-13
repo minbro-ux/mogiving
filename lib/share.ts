@@ -14,6 +14,8 @@ export type SharePayload = {
   o: string;
   /** 펀딩 제목 */
   t: string;
+  /** 주최자 한마디. 목적 선택 기능 이전의 링크에는 없으며, 그때는 당시 기본값(생일 문구)으로 복원한다 */
+  m?: string;
   /** 공유 시점 달성률 (%) */
   r: number;
   /** 마감 시각 */
@@ -43,6 +45,7 @@ export function toSharePayload(f: Funding): SharePayload {
     id: f.id,
     o: f.ownerName,
     t: f.title,
+    m: f.ownerMessage,
     r: Math.min(100, percent(sumAmount(f.participants), f.goal)),
     d: f.deadline,
     // blob: 등 로컬 이미지는 외부에서 열 수 없으므로 공개 주소만 담는다
@@ -84,6 +87,7 @@ export function publicPayload(s: SharePayload): SharePayload {
     id: s.id.slice(0, 64),
     o: s.o.slice(0, 40),
     t: s.t.slice(0, 80),
+    m: str(s.m, 200),
     r: Math.max(0, Math.min(100, Math.round(s.r))),
     d: s.d,
     p: {
@@ -193,7 +197,7 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
   const curated = PRODUCTS.find((p) => p.id === s.p.id);
   const { img, opt, ...rest } = s.p;
   const product: Product = { ...(curated ?? { ...rest, imageUrl: img }), option: opt };
-  const base = createFunding(product, { title: s.t, ownerName: s.o });
+  const base = createFunding(product, { title: s.t, message: s.m, ownerName: s.o });
   if (summary) {
     const goal = summary.goal && summary.goal > 0 ? summary.goal : base.goal;
     return {

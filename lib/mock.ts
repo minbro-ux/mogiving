@@ -1,4 +1,5 @@
 import { goalWithFee } from "./fee";
+import { LEGACY_PURPOSE, presetTitle, purposePreset } from "./purpose";
 import type { Funding, Participant, Product, ShippingAddress } from "./types";
 
 /** 운영자 추천 큐레이션 (구매처 링크 포함) */
@@ -88,9 +89,10 @@ export function createFunding(
     ...(opts.shipping ? { shipping: opts.shipping } : {}),
     // product.price는 선물 원가(base_price), goal은 수수료를 더한 최종 목표 금액
     goal: goalWithFee(product.price),
-    title: opts.title || (round > 1 ? `내 생일 선물 펀딩 ${round}탄` : "내 생일 선물 펀딩"),
+    // 제목·한마디를 넘기지 않으면(목적 선택 이전의 예전 공유 링크 등) 당시 기본값이던 생일 문구로 채운다
+    title: opts.title?.trim() || presetTitle(LEGACY_PURPOSE, round),
     ownerName: opts.ownerName.trim(),
-    ownerMessage: opts.message || "올해 생일엔 이 선물이 정말 갖고 싶어요! 마음 모아주시면 감사히 받을게요 🙏",
+    ownerMessage: opts.message?.trim() || purposePreset(LEGACY_PURPOSE).message,
     deadline: Date.now() + (opts.days ?? 7) * DAY,
     participants: [],
     phase: "active",
