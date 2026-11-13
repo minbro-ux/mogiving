@@ -104,7 +104,7 @@ export function publicPayload(s: SharePayload): SharePayload {
 export function isShippingAddress(v: unknown): v is ShippingAddress {
   const a = v as ShippingAddress | null;
   const ok = (x: unknown, max: number) => typeof x === "string" && x.length <= max;
-  return !!a && ok(a.name, 20) && ok(a.phone, 20) && ok(a.address, 100) && ok(a.detail, 60) && (a.memo === undefined || ok(a.memo, 60));
+  return !!a && ok(a.name, 20) && ok(a.phone, 20) && ok(a.address, 100) && ok(a.detail, 60) && (a.memo === undefined || ok(a.memo, 60)) && (a.zonecode === undefined || (typeof a.zonecode === "string" && /^\d{5}$/.test(a.zonecode)));
 }
 
 export function isSharePayload(v: unknown): v is SharePayload {

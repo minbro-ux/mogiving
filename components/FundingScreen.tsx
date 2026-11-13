@@ -377,6 +377,7 @@ function ShippingCard({ shipping: s }: { shipping: ShippingAddress }) {
         {s.name} · {s.phone}
       </p>
       <p className="mt-0.5 text-[13px] leading-snug text-grey-600">
+        {s.zonecode && `(${s.zonecode}) `}
         {s.address} {s.detail}
       </p>
       {s.memo && <p className="mt-0.5 text-[12px] text-grey-500">메모: {s.memo}</p>}
@@ -493,6 +494,7 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
               {r.address.name} · {r.address.phone}
             </p>
             <p className="mt-0.5">
+              {r.address.zonecode && `(${r.address.zonecode}) `}
               {r.address.address} {r.address.detail}
             </p>
           </div>

@@ -273,8 +273,8 @@ export function verifyShareKey(id: string, key: string): Promise<boolean> {
 
 /** 배송 접수를 저장한다. 주최자 key 확인은 호출하는 쪽에서 먼저 한다 */
 export function requestDelivery(id: string, key: string, shipping: ShippingAddress) {
-  const { name, phone, address, detail, memo } = shipping;
-  return exclusive(() => store.requestDelivery(id, hashKey(key), { name, phone, address, detail, ...(memo ? { memo } : {}) }));
+  const { name, phone, zonecode, address, detail, memo } = shipping;
+  return exclusive(() => store.requestDelivery(id, hashKey(key), { name, phone, ...(zonecode ? { zonecode } : {}), address, detail, ...(memo ? { memo } : {}) }));
 }
 
 /** 배송 접수 기록. 배송지가 들어 있으므로 주최자가 아니면 호출한 쪽에서 빼고 내보낸다 */

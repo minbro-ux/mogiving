@@ -34,6 +34,8 @@ export type Participant = {
 export type ShippingAddress = {
   name: string;
   phone: string;
+  /** 우편번호 (카카오 우편번호 검색으로 입력. 이 필드가 생기기 전에 저장된 배송지에는 없다) */
+  zonecode?: string;
   address: string;
   detail: string;
   /** 배송 메모 (부재 시 문 앞 등) */

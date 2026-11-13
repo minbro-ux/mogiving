@@ -48,7 +48,7 @@ export function toAdminView(r: AdminShareRow): AdminView {
     deadline: p.d,
     recipient: s?.name ?? "",
     phone: s?.phone ?? "",
-    address: s ? [s.address, s.detail].filter(Boolean).join(" ") : "",
+    address: s ? [s.zonecode && `(${s.zonecode})`, s.address, s.detail].filter(Boolean).join(" ") : "",
     memo: s?.memo ?? "",
     deliveryRequestedAt: r.deliveryRequestedAt,
   };

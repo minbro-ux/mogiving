@@ -5,6 +5,7 @@ import { MapPin, ShieldCheck, Truck } from "lucide-react";
 import { won } from "@/lib/format";
 import { AUTO_REFUND_DAYS } from "@/lib/policy";
 import type { Funding, Product, Resolution, ShippingAddress } from "@/lib/types";
+import { PostcodeFields } from "./AddressSearch";
 import { BottomSheet, Button, ProductThumb, Spinner } from "./ui";
 
 type Step = "cancel" | "address" | "processing";
@@ -159,8 +160,7 @@ export function ResolutionSheet({
           <AddressInput value={address.name} maxLength={20} onChange={(v) => setAddress({ ...address, name: v })} placeholder="받는 분" />
           <AddressInput value={address.phone} maxLength={20} onChange={(v) => setAddress({ ...address, phone: v })} placeholder="연락처" inputMode="tel" />
         </div>
-        <AddressInput className="mt-2" value={address.address} maxLength={100} onChange={(v) => setAddress({ ...address, address: v })} placeholder="주소" />
-        <AddressInput className="mt-2" value={address.detail} maxLength={60} onChange={(v) => setAddress({ ...address, detail: v })} placeholder="상세 주소 (선택)" />
+        <PostcodeFields value={address} onChange={(patch) => setAddress({ ...address, ...patch })} inputClassName={ADDRESS_INPUT_CLASS} />
       </div>
       <p className="mt-3 text-[13px] text-grey-500">접수 후에는 배송지를 바꿀 수 없으니 한 번 더 확인해 주세요.</p>
       <NoCashNote />
@@ -191,6 +191,9 @@ function ProductRow({ product }: { product: Product }) {
   );
 }
 
+const ADDRESS_INPUT_CLASS =
+  "h-12 w-full rounded-xl bg-grey-100 px-4 text-[15px] text-grey-900 outline-none placeholder:text-grey-400 focus:ring-2 focus:ring-toss-blue";
+
 function AddressInput({
   value,
   onChange,
@@ -213,7 +216,7 @@ function AddressInput({
       maxLength={maxLength}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`h-12 w-full rounded-xl bg-grey-100 px-4 text-[15px] text-grey-900 outline-none placeholder:text-grey-400 focus:ring-2 focus:ring-toss-blue ${className}`}
+      className={`${ADDRESS_INPUT_CLASS} ${className}`}
     />
   );
 }

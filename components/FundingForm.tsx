@@ -5,6 +5,7 @@ import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
 import { FUNDING_PERIOD_DAYS } from "@/lib/policy";
 import type { ShippingAddress } from "@/lib/types";
+import { PostcodeFields } from "./AddressSearch";
 
 /* ------------------------- 펀딩 개설 시트 공통 폼 요소 ------------------------- */
 
@@ -139,7 +140,8 @@ export function shippingStatus(s: ShippingAddress): "empty" | "complete" | "part
 export function toShipping(s: ShippingAddress): ShippingAddress | undefined {
   if (shippingStatus(s) !== "complete") return undefined;
   const memo = s.memo?.trim();
-  return { name: s.name.trim(), phone: s.phone.trim(), address: s.address.trim(), detail: s.detail.trim(), ...(memo ? { memo } : {}) };
+  const zonecode = s.zonecode?.trim();
+  return { name: s.name.trim(), phone: s.phone.trim(), ...(zonecode ? { zonecode } : {}), address: s.address.trim(), detail: s.detail.trim(), ...(memo ? { memo } : {}) };
 }
 
 /** 선물 수령용 배송지. 지금 비워 두면 펀딩 성공 후 수령 단계에서 입력한다 */
@@ -161,8 +163,7 @@ export function ShippingFields({ value, onChange }: { value: ShippingAddress; on
         <input value={value.name} maxLength={20} onChange={(e) => set({ name: e.target.value })} placeholder="수령인 이름" className={inputClass} />
         <input value={value.phone} maxLength={20} inputMode="tel" onChange={(e) => set({ phone: e.target.value })} placeholder="연락처" className={inputClass} />
       </div>
-      <input value={value.address} maxLength={100} onChange={(e) => set({ address: e.target.value })} placeholder="주소" className={`${inputClass} mt-2`} />
-      <input value={value.detail} maxLength={60} onChange={(e) => set({ detail: e.target.value })} placeholder="상세 주소 (선택)" className={`${inputClass} mt-2`} />
+      <PostcodeFields value={value} onChange={set} inputClassName={inputClass} />
       <input value={value.memo ?? ""} maxLength={60} onChange={(e) => set({ memo: e.target.value })} placeholder="배송 메모 (예: 부재 시 문 앞)" className={`${inputClass} mt-2`} />
       {partial && <p className="mt-2 text-[13px] text-toss-red">수령인 이름, 연락처, 주소를 모두 입력하거나 전부 비워주세요</p>}
     </div>
