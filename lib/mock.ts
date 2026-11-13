@@ -3,6 +3,19 @@ import type { Funding, Participant, Product, ShippingAddress } from "./types";
 
 /** 운영자 추천 큐레이션 (구매처 링크 포함) */
 export const PRODUCTS: Product[] = [
+  {
+    id: "p16",
+    brand: "Apple",
+    name: "Apple AirPods Pro 3 (MagSafe 충전 케이스 USB-C)",
+    price: 369000,
+    emoji: "🎧",
+    bg: "#F5F5F7",
+    category: "디지털/가전",
+    mall: "Apple Store",
+    url: "https://www.apple.com/kr/shop/buy-airpods/airpods-pro-3",
+    // Apple 스토어 CDN (CORS 허용, Referer 검사 없음). 실패해도 ProductThumb가 이모지로 대체한다
+    imageUrl: "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/airpods-pro-3-hero-select-202509?wid=600&hei=600&fmt=jpeg&qlt=90",
+  },
   { id: "p1", brand: "Apple", name: "에어팟 프로 2세대 USB-C", price: 329000, originalPrice: 359000, emoji: "🎧", bg: "#EEF1F5", category: "디지털/가전", mall: "쿠팡", url: "https://www.coupang.com/vp/products/7581203", rating: 4.9, reviews: 12840 },
   { id: "p13", brand: "PANDORA", name: "판도라 모먼트 스네이크 체인 실버 팔찌", price: 129000, emoji: "💎", bg: "#F3F1F7", category: "주얼리/패션", mall: "29CM", url: "https://www.29cm.co.kr/products/1840221", rating: 4.8, reviews: 2140 },
   { id: "p2", brand: "Dyson", name: "다이슨 에어랩 멀티 스타일러 컴플리트 롱", price: 699000, originalPrice: 749000, emoji: "💨", bg: "#F6EEF3", category: "디지털/가전", mall: "SSG.COM", url: "https://www.ssg.com/item/itemView.ssg?itemId=1000542", rating: 4.8, reviews: 5320 },
