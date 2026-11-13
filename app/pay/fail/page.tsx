@@ -1,5 +1,4 @@
 import { AlertCircle } from "lucide-react";
-import { Footer } from "@/components/Footer";
 
 type Props = { searchParams: { code?: string; share?: string } };
 
@@ -8,7 +7,7 @@ export default function PayFailPage({ searchParams: { code, share } }: Props) {
   const canceled = code === "PAY_PROCESS_CANCELED";
   const back = share && /^[A-Za-z0-9]{7}$/.test(share) ? `/f/${share}` : "/";
   return (
-    <main className="relative mx-auto min-h-dvh max-w-[430px] bg-white shadow-[0_0_40px_rgba(0,0,0,0.06)]">
+    <main className="relative mx-auto w-full max-w-[430px] flex-1 bg-white shadow-[0_0_40px_rgba(0,0,0,0.06)]">
       <div className="flex flex-col items-center px-5 py-16 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-toss-orange text-white">
           <AlertCircle size={34} />
@@ -20,7 +19,6 @@ export default function PayFailPage({ searchParams: { code, share } }: Props) {
           {back === "/" ? "처음으로" : "펀딩으로 돌아가기"}
         </a>
       </div>
-      <Footer />
     </main>
   );
 }

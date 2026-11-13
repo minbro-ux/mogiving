@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Footer } from "@/components/Footer";
 import { FundingScreen, type Role } from "@/components/FundingScreen";
 import { ParticipateSheet, ShareSheet } from "@/components/FundingSheets";
 import { ResolutionSheet } from "@/components/ResolutionSheet";
@@ -192,7 +191,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   /* -------------------------------- render -------------------------------- */
 
   return (
-    <main className="relative mx-auto min-h-dvh max-w-[430px] bg-white shadow-[0_0_40px_rgba(0,0,0,0.06)]">
+    <main className="relative mx-auto w-full max-w-[430px] flex-1 bg-white shadow-[0_0_40px_rgba(0,0,0,0.06)]">
       {screen === "shop" || !funding ? (
         <ShopScreen onCreate={handleCreate} onBack={funding ? () => setScreen("funding") : undefined} onToast={showToast} />
       ) : (
@@ -232,9 +231,6 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
           )}
         </>
       )}
-
-      {/* 고정 CTA(최대 약 114px)에 가려지지 않는 패딩 */}
-      <Footer className="pb-32" />
 
       <Toast message={toast} />
     </main>

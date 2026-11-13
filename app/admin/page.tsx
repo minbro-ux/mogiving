@@ -4,7 +4,6 @@ import { kstDateTime, toAdminView } from "@/lib/adminRows";
 import { won } from "@/lib/format";
 import { type RefundAttention, listRefundAttention } from "@/lib/paymentStore";
 import { listSharesForAdmin } from "@/lib/shareStore";
-import { Footer } from "@/components/Footer";
 import { CopyButton } from "./CopyButton";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +42,7 @@ export default async function AdminPage({ searchParams }: Props) {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 text-gray-900 sm:px-8">
+    <main className="flex-1 bg-gray-50 px-4 py-6 text-gray-900 sm:px-8">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">모기빙 운영자 대시보드</h1>
@@ -152,7 +151,6 @@ export default async function AdminPage({ searchParams }: Props) {
           </tbody>
         </table>
       </div>
-      <Footer className="mt-8 pb-4" />
     </main>
   );
 }
@@ -203,7 +201,7 @@ function RefundAttentionPanel({ refunds }: { refunds: RefundAttention[] }) {
 
 function LoginScreen({ error, configured }: { error: boolean; configured: boolean }) {
   return (
-    <main className="flex min-h-screen flex-col bg-gray-50 px-4">
+    <main className="flex flex-1 flex-col bg-gray-50 px-4">
       <form action="/api/admin/login" method="post" className="m-auto w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="text-lg font-bold text-gray-900">🔒 운영자 전용</h1>
         <p className="mt-1 text-sm text-gray-500">관리자 비밀번호를 입력해 주세요.</p>
@@ -220,7 +218,6 @@ function LoginScreen({ error, configured }: { error: boolean; configured: boolea
         {error && <p className="mt-2 text-xs text-red-600">비밀번호가 올바르지 않아요.</p>}
         <button className="mt-4 w-full rounded-lg bg-gray-900 py-2 text-sm font-semibold text-white hover:bg-gray-800">잠금 해제</button>
       </form>
-      <Footer className="mt-8 pb-4" />
     </main>
   );
 }

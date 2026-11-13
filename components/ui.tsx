@@ -45,7 +45,7 @@ export function Spinner({ className = "" }: { className?: string }) {
 
 export function BottomCTA({ children }: { children: React.ReactNode }) {
   return (
-    <div className="pointer-events-none fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2">
+    <div data-bottom-cta className="pointer-events-none fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2">
       <div className="h-6 bg-gradient-to-t from-white to-transparent" />
       <div className="pointer-events-auto bg-white px-5 pb-safe">{children}</div>
     </div>

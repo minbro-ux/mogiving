@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Footer } from "@/components/Footer";
 import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -39,7 +40,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />
       </head>
-      <body className="font-sans">{children}</body>
+      <body className="flex min-h-dvh flex-col font-sans">
+        {children}
+        <Footer />
+      </body>
     </html>
   );
 }

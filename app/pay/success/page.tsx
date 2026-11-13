@@ -3,13 +3,13 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, Check } from "lucide-react";
-import { Footer } from "@/components/Footer";
 import { Spinner } from "@/components/ui";
+import { COMPANY } from "@/lib/company";
 import { rememberMyContribution } from "@/lib/contribute";
 import { won } from "@/lib/format";
 import { type ConfirmFail, type ConfirmOk, confirmPayment } from "@/lib/payment";
 
-const SUPPORT_EMAIL = "idmin.official@gmail.com";
+const SUPPORT_EMAIL = COMPANY.email;
 
 const FAIL_TEXT: Record<string, string> = {
   funding_closed: "결제를 진행하는 사이 펀딩이 마감됐어요. 결제는 청구되지 않았어요.",
@@ -121,11 +121,10 @@ function PaySuccess() {
 /** 토스페이먼츠 결제창 성공 후 돌아오는 화면 (?paymentKey&orderId&amount). 여기서 서버 승인을 호출해야 결제가 완료된다 */
 export default function PaySuccessPage() {
   return (
-    <main className="relative mx-auto min-h-dvh max-w-[430px] bg-white shadow-[0_0_40px_rgba(0,0,0,0.06)]">
+    <main className="relative mx-auto w-full max-w-[430px] flex-1 bg-white shadow-[0_0_40px_rgba(0,0,0,0.06)]">
       <Suspense fallback={null}>
         <PaySuccess />
       </Suspense>
-      <Footer />
     </main>
   );
 }
