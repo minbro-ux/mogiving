@@ -42,6 +42,19 @@ export const PRODUCTS: Product[] = [
     // gucci.com·media.gucci.com은 Akamai 봇 차단(서버/크롤러 요청 403·타임아웃)이라 공식 이미지(800x800)를 직접 저장해 사용
     imageUrl: "/images/gucci-web-detail-wide-ring.jpg",
   },
+  {
+    id: "p19",
+    brand: "DJI",
+    name: "DJI 오즈모 포켓 4P Osmo Pocket 4P 브이로그 콤보",
+    price: 999000,
+    emoji: "📷",
+    bg: "#FFFFFF",
+    category: "디지털/가전",
+    mall: "DJI 공식스토어",
+    url: "https://brand.naver.com/dji/products/13641244812",
+    // 네이버 쇼핑 CDN(shop-phinf.pstatic.net)은 핫링크 정책이 바뀔 수 있어 대표 이미지(1000x1000)를 직접 저장해 사용
+    imageUrl: "/images/dji-osmo-pocket-4p-vlog-combo.jpg",
+  },
   { id: "p13", brand: "PANDORA", name: "판도라 모먼트 스네이크 체인 실버 팔찌", price: 129000, emoji: "💎", bg: "#F3F1F7", category: "주얼리/패션", mall: "29CM", url: "https://www.29cm.co.kr/products/1840221", rating: 4.8, reviews: 2140 },
   { id: "p2", brand: "Dyson", name: "다이슨 에어랩 멀티 스타일러 컴플리트 롱", price: 699000, originalPrice: 749000, emoji: "💨", bg: "#F6EEF3", category: "디지털/가전", mall: "SSG.COM", url: "https://www.ssg.com/item/itemView.ssg?itemId=1000542", rating: 4.8, reviews: 5320 },
   { id: "p4", brand: "Jo Malone", name: "조말론 우드 세이지 앤 씨 솔트 코롱 100ml", price: 218000, emoji: "🌿", bg: "#EEF4EF", category: "뷰티/향수", mall: "29CM", url: "https://www.29cm.co.kr/products/993120", rating: 4.8, reviews: 3980 },
