@@ -1,5 +1,5 @@
 import { goalWithFee } from "./fee";
-import { LEGACY_PURPOSE, presetTitle, purposePreset } from "./purpose";
+import { type FundingPurpose, LEGACY_PURPOSE, presetTitle, purposePreset } from "./purpose";
 import type { Funding, Participant, Product, ShippingAddress } from "./types";
 
 /** 운영자 추천 큐레이션 (구매처 링크 포함) */
@@ -79,7 +79,7 @@ export const sumAmount = (ps: Participant[]) => ps.reduce((s, p) => s + p.amount
 
 export function createFunding(
   product: Product,
-  opts: { ownerName: string; title?: string; message?: string; days?: number; round?: number; option?: string; shipping?: ShippingAddress },
+  opts: { ownerName: string; title?: string; message?: string; purpose?: FundingPurpose; days?: number; round?: number; option?: string; shipping?: ShippingAddress },
 ): Funding {
   const round = opts.round ?? 1;
   const option = opts.option?.trim();
@@ -93,6 +93,7 @@ export function createFunding(
     title: opts.title?.trim() || presetTitle(LEGACY_PURPOSE, round),
     ownerName: opts.ownerName.trim(),
     ownerMessage: opts.message?.trim() || purposePreset(LEGACY_PURPOSE).message,
+    ...(opts.purpose ? { purpose: opts.purpose } : {}),
     deadline: Date.now() + (opts.days ?? 7) * DAY,
     participants: [],
     phase: "active",

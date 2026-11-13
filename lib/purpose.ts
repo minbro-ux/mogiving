@@ -27,3 +27,17 @@ export const presetTitle = (id: FundingPurpose, round = 1) => {
   const title = purposePreset(id).title;
   return round > 1 ? `${title} ${round}탄` : title;
 };
+
+/** 친구가 참여할 때 고를 수 있는 축하 메시지 추천 문구 (목적별) */
+const CHEER_PRESETS: Record<FundingPurpose, string[]> = {
+  general: ["선물 꼭 받길 바라! 🎁", "늘 고마워 💙", "행복한 하루 보내!"],
+  birthday: ["생일 축하해! 🎂", "늘 고마워 💙", "행복한 하루 보내!"],
+  housewarming: ["집들이 축하해! 🏠", "새 집에서 행복하게 지내 ✨", "자주 놀러 갈게!"],
+  anniversary: ["진심으로 축하해! 💐", "오래오래 행복하길 💕", "앞으로도 지금처럼!"],
+  graduation: ["새 출발 축하해! 🎓", "앞날을 응원할게 💪", "그동안 정말 고생 많았어!"],
+};
+
+/** 목적이 없는 예전 펀딩은 당시 문구(생일)를 그대로 보여준다 */
+export const cheerPresets = (id?: FundingPurpose) => CHEER_PRESETS[id ?? LEGACY_PURPOSE] ?? CHEER_PRESETS[LEGACY_PURPOSE];
+
+export const isFundingPurpose = (v: unknown): v is FundingPurpose => typeof v === "string" && FUNDING_PURPOSES.some((p) => p.id === v);

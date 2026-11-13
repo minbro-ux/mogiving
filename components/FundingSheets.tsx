@@ -8,6 +8,7 @@ import { pieceInfo, piecesAmount } from "@/lib/pieces";
 import { amountProblem } from "@/lib/policy";
 import type { startTossPayment } from "@/lib/payment";
 import { copyText } from "@/lib/share";
+import { cheerPresets } from "@/lib/purpose";
 import type { Funding } from "@/lib/types";
 import { BottomSheet, Button, PieceGrid, ProductThumb, Segmented, Spinner } from "./ui";
 
@@ -15,7 +16,6 @@ import { BottomSheet, Button, PieceGrid, ProductThumb, Segmented, Spinner } from
 
 const QUICK = [5000, 10000, 30000, 50000];
 const PIECE_QUICK = [1, 2, 3, 5];
-const MESSAGE_PRESETS = ["생일 축하해! 🎂", "늘 고마워 💙", "행복한 하루 보내!"];
 
 export function ParticipateSheet({
   open,
@@ -227,7 +227,7 @@ export function ParticipateSheet({
         className="w-full resize-none rounded-xl bg-grey-100 px-4 py-3 text-[16px] outline-none placeholder:text-grey-400 focus:ring-2 focus:ring-toss-blue"
       />
       <div className="mt-2 flex flex-wrap gap-2">
-        {MESSAGE_PRESETS.map((m) => (
+        {cheerPresets(funding.purpose).map((m) => (
           <button key={m} onClick={() => setMessage(m)} className="rounded-full border border-grey-200 px-3 py-1.5 text-[13px] text-grey-600 active:bg-grey-50">
             {m}
           </button>

@@ -1,6 +1,7 @@
 import { percent } from "./format";
 import { PRODUCTS, createFunding, sumAmount } from "./mock";
 import { type ContributionSummary, giftFromDelivery, participantsFromSummary } from "./contribute";
+import { type FundingPurpose, isFundingPurpose } from "./purpose";
 import { linkOrigin } from "./site";
 import type { Funding, Product, ShippingAddress } from "./types";
 
@@ -16,6 +17,8 @@ export type SharePayload = {
   t: string;
   /** 주최자 한마디. 목적 선택 기능 이전의 링크에는 없으며, 그때는 당시 기본값(생일 문구)으로 복원한다 */
   m?: string;
+  /** 선물 목적. 없으면(예전 링크) 생일로 간주한다 */
+  k?: FundingPurpose;
   /** 공유 시점 달성률 (%) */
   r: number;
   /** 마감 시각 */
@@ -46,6 +49,7 @@ export function toSharePayload(f: Funding): SharePayload {
     o: f.ownerName,
     t: f.title,
     m: f.ownerMessage,
+    k: f.purpose,
     r: Math.min(100, percent(sumAmount(f.participants), f.goal)),
     d: f.deadline,
     // blob: 등 로컬 이미지는 외부에서 열 수 없으므로 공개 주소만 담는다
@@ -88,6 +92,7 @@ export function publicPayload(s: SharePayload): SharePayload {
     o: s.o.slice(0, 40),
     t: s.t.slice(0, 80),
     m: str(s.m, 200),
+    k: isFundingPurpose(s.k) ? s.k : undefined,
     r: Math.max(0, Math.min(100, Math.round(s.r))),
     d: s.d,
     p: {
@@ -197,7 +202,7 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
   const curated = PRODUCTS.find((p) => p.id === s.p.id);
   const { img, opt, ...rest } = s.p;
   const product: Product = { ...(curated ?? { ...rest, imageUrl: img }), option: opt };
-  const base = createFunding(product, { title: s.t, message: s.m, ownerName: s.o });
+  const base = createFunding(product, { title: s.t, message: s.m, purpose: s.k, ownerName: s.o });
   if (summary) {
     const goal = summary.goal && summary.goal > 0 ? summary.goal : base.goal;
     return {

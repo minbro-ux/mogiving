@@ -118,8 +118,9 @@ export const purposeDraft = (purpose: FundingPurpose = DEFAULT_PURPOSE, round = 
   message: purposePreset(purpose).message,
 });
 
-/** 저장용 제목·한마디. 입력칸을 비워 두면 고른 목적의 기본 문구로 채운다 */
+/** 저장용 목적·제목·한마디. 입력칸을 비워 두면 고른 목적의 기본 문구로 채운다 */
 export const purposeText = (d: PurposeDraft, round = 1) => ({
+  purpose: d.purpose,
   title: d.title.trim() || presetTitle(d.purpose, round),
   message: d.message.trim() || purposePreset(d.purpose).message,
 });

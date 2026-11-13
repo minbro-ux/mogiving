@@ -1,3 +1,4 @@
+import type { FundingPurpose } from "./purpose";
 export type Product = {
   id: string;
   brand: string;
@@ -80,6 +81,8 @@ export type Funding = {
   title: string;
   ownerName: string;
   ownerMessage: string;
+  /** 선물 목적. 목적 선택 기능 이전에 만든 펀딩에는 없다 (생일로 간주) */
+  purpose?: FundingPurpose;
   deadline: number;
   participants: Participant[];
   phase: Phase;
