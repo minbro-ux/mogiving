@@ -18,6 +18,7 @@ export function FundingScreen({
   funding,
   role,
   onRoleChange,
+  onBrowse,
   onParticipate,
   onShare,
   onResolve,
@@ -28,6 +29,8 @@ export function FundingScreen({
   role: Role;
   /** 없으면 시점 토글을 숨긴다 (공유 링크 화면) */
   onRoleChange?: (r: Role) => void;
+  /** 주최자가 선물 고르기 화면으로 돌아가는 링크. 공유 링크로 들어온 친구에게는 보이지 않는다 */
+  onBrowse?: () => void;
   onParticipate: () => void;
   onShare: () => void;
   onResolve: () => void;
@@ -215,6 +218,15 @@ export function FundingScreen({
           <PrivateFeed funding={funding} />
         )}
       </section>
+
+      {/* 헤더에 뒤로가기가 없으므로, 주최자에게만 선물 고르기로 돌아가는 길을 둔다 */}
+      {isOwner && onBrowse && (
+        <div className="mt-8 flex justify-center px-5">
+          <button onClick={onBrowse} className="inline-flex items-center gap-0.5 rounded-full px-3 py-2 text-[14px] font-medium text-grey-500 active:bg-grey-100">
+            다른 선물 둘러보기 <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
 
       {/* 하단 CTA */}
       <BottomCTA>
