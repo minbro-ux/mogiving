@@ -25,7 +25,7 @@ export const PRIVACY_OFFICER = { name: COMPANY.ceo, title: "대표", phone: COMP
 
 /**
  * 개인정보 처리 위탁·국외 이전 업체.
- * Supabase는 프로젝트 리전(대시보드 Project Settings → General → Region)에 따라 country를 정확히 적어야 한다
+ * Supabase country는 프로젝트 리전(ap-northeast-1, 도쿄) 기준. 리전을 옮기면 함께 바꾼다
  */
 export const PROCESSORS = [
   {
@@ -38,7 +38,7 @@ export const PROCESSORS = [
     name: "Supabase, Inc.",
     task: "펀딩·참여·주문·배송지 정보의 데이터베이스 저장",
     items: "개설자 표시 이름, 닉네임, 메시지, 참여 금액, 주문·결제 내역, 배송지 정보",
-    country: "미국 (Supabase 프로젝트 리전 확인 필요)",
+    country: "일본 (도쿄 리전)",
   },
   {
     name: "Vercel Inc.",
