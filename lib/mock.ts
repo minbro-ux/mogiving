@@ -56,6 +56,19 @@ export const PRODUCTS: Product[] = [
     // 네이버 쇼핑 CDN(shop-phinf.pstatic.net)은 핫링크 정책이 바뀔 수 있어 대표 이미지(1000x1000)를 직접 저장해 사용
     imageUrl: "/images/dji-osmo-pocket-4p-vlog-combo.jpg",
   },
+  {
+    id: "p20",
+    brand: "K2",
+    name: "K2 에어로스피어(AEROSPHERE) ZERO 구스다운 (Blue GRAY)",
+    price: 359000,
+    emoji: "🧥",
+    bg: "#FFFFFF",
+    category: "주얼리/패션",
+    mall: "K-Village",
+    url: "https://www.k-village.co.kr/goods/KMU26543BH",
+    // 원본 이미지가 3MB(1500x2000)라 케이빌리지 CDN의 800x800 리사이즈본을 직접 저장해 사용
+    imageUrl: "/images/k2-aerosphere-zero-blue-gray.jpg",
+  },
   { id: "p13", brand: "PANDORA", name: "판도라 모먼트 스네이크 체인 실버 팔찌", price: 129000, emoji: "💎", bg: "#F3F1F7", category: "주얼리/패션", mall: "29CM", url: "https://www.29cm.co.kr/products/1840221", rating: 4.8, reviews: 2140 },
   { id: "p2", brand: "Dyson", name: "다이슨 에어랩 멀티 스타일러 컴플리트 롱", price: 699000, originalPrice: 749000, emoji: "💨", bg: "#F6EEF3", category: "디지털/가전", mall: "SSG.COM", url: "https://www.ssg.com/item/itemView.ssg?itemId=1000542", rating: 4.8, reviews: 5320 },
   { id: "p4", brand: "Jo Malone", name: "조말론 우드 세이지 앤 씨 솔트 코롱 100ml", price: 218000, emoji: "🌿", bg: "#EEF4EF", category: "뷰티/향수", mall: "29CM", url: "https://www.29cm.co.kr/products/993120", rating: 4.8, reviews: 3980 },
