@@ -155,7 +155,14 @@ export function ProductThumb({ product, size = "md", className = "" }: { product
     <div className={`flex shrink-0 select-none items-center justify-center overflow-hidden ${S} ${className}`} style={{ backgroundColor: product.bg }}>
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={product.name} referrerPolicy="no-referrer" onError={() => setBrokenSrc(src)} className="h-full w-full object-cover" />
+        <img
+          src={src}
+          alt={product.name}
+          referrerPolicy="no-referrer"
+          onError={() => setBrokenSrc(src)}
+          // 큐레이션 상품은 흰 배경 공식 누끼 이미지: 4:3 등 비율이 달라도 잘리지 않게 contain, 흰 배경은 썸네일 배경색에 섞는다
+          className={`h-full w-full ${product.curated ? "object-contain mix-blend-multiply" : "object-cover"}`}
+        />
       ) : (
         <span className="drop-shadow-sm">{product.emoji}</span>
       )}
