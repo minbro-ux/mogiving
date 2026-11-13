@@ -5,7 +5,7 @@ import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
 import { FUNDING_PERIOD_DAYS } from "@/lib/policy";
 import type { ShippingAddress } from "@/lib/types";
-import { PostcodeFields } from "./AddressSearch";
+import { PostcodeFields, cleanZonecode } from "./AddressSearch";
 
 /* ------------------------- 펀딩 개설 시트 공통 폼 요소 ------------------------- */
 
@@ -140,7 +140,7 @@ export function shippingStatus(s: ShippingAddress): "empty" | "complete" | "part
 export function toShipping(s: ShippingAddress): ShippingAddress | undefined {
   if (shippingStatus(s) !== "complete") return undefined;
   const memo = s.memo?.trim();
-  const zonecode = s.zonecode?.trim();
+  const zonecode = cleanZonecode(s.zonecode);
   return { name: s.name.trim(), phone: s.phone.trim(), ...(zonecode ? { zonecode } : {}), address: s.address.trim(), detail: s.detail.trim(), ...(memo ? { memo } : {}) };
 }
 

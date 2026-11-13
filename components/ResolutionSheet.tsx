@@ -5,7 +5,7 @@ import { MapPin, ShieldCheck, Truck } from "lucide-react";
 import { won } from "@/lib/format";
 import { AUTO_REFUND_DAYS } from "@/lib/policy";
 import type { Funding, Product, Resolution, ShippingAddress } from "@/lib/types";
-import { PostcodeFields } from "./AddressSearch";
+import { PostcodeFields, cleanZonecode } from "./AddressSearch";
 import { BottomSheet, Button, ProductThumb, Spinner } from "./ui";
 
 type Step = "cancel" | "address" | "processing";
@@ -72,7 +72,10 @@ export function ResolutionSheet({
     setError(null);
     setProcessingText("배송을 접수하고 있어요");
     setStep("processing");
-    const r = await onRequestDelivery(address);
+    // 직접 입력 중 덜 쓴 우편번호(5자리 아님)는 빼고 보낸다
+    const { zonecode, ...rest } = address;
+    const z = cleanZonecode(zonecode);
+    const r = await onRequestDelivery(z ? { ...rest, zonecode: z } : rest);
     if (r.ok) {
       onResolve({ kind: "gift", product, reason: "achieved", address: r.address, collected: raised });
       return;
