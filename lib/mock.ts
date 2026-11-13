@@ -29,6 +29,19 @@ export const PRODUCTS: Product[] = [
     // AirPods Max 2 구입 페이지의 대표 이미지 (전 색상). Apple CDN, CORS 허용·Referer 검사 없음
     imageUrl: "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/airpods-max-hero-select-202409?wid=600&hei=600&fmt=jpeg&qlt=90",
   },
+  {
+    id: "p18",
+    brand: "Gucci",
+    name: "구찌 웹(Web) 디테일 와이드 반지 925 스털링 실버",
+    price: 730000,
+    emoji: "💍",
+    bg: "#FFFFFF",
+    category: "주얼리/패션",
+    mall: "Gucci",
+    url: "https://www.gucci.com/kr/ko/pr/jewelry-watches/silver-jewelry/silver-jewelry-for-men/wide-ring-with-web-detail-p-853849J89L08518",
+    // gucci.com·media.gucci.com은 Akamai 봇 차단(서버/크롤러 요청 403·타임아웃)이라 공식 이미지(800x800)를 직접 저장해 사용
+    imageUrl: "/images/gucci-web-detail-wide-ring.jpg",
+  },
   { id: "p13", brand: "PANDORA", name: "판도라 모먼트 스네이크 체인 실버 팔찌", price: 129000, emoji: "💎", bg: "#F3F1F7", category: "주얼리/패션", mall: "29CM", url: "https://www.29cm.co.kr/products/1840221", rating: 4.8, reviews: 2140 },
   { id: "p2", brand: "Dyson", name: "다이슨 에어랩 멀티 스타일러 컴플리트 롱", price: 699000, originalPrice: 749000, emoji: "💨", bg: "#F6EEF3", category: "디지털/가전", mall: "SSG.COM", url: "https://www.ssg.com/item/itemView.ssg?itemId=1000542", rating: 4.8, reviews: 5320 },
   { id: "p4", brand: "Jo Malone", name: "조말론 우드 세이지 앤 씨 솔트 코롱 100ml", price: 218000, emoji: "🌿", bg: "#EEF4EF", category: "뷰티/향수", mall: "29CM", url: "https://www.29cm.co.kr/products/993120", rating: 4.8, reviews: 3980 },
