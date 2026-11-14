@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { mallTheme, usesMallThumb } from "@/lib/mallThumb";
 import type { Product } from "@/lib/types";
 
 /* ---------------------------------- Button --------------------------------- */
@@ -163,8 +164,44 @@ export function ProductThumb({ product, size = "md", className = "" }: { product
           // 큐레이션 상품은 흰 배경 공식 누끼 이미지: 4:3 등 비율이 달라도 잘리지 않게 contain, 흰 배경은 썸네일 배경색에 섞는다
           className={`h-full w-full ${product.curated ? "object-contain mix-blend-multiply" : "object-cover"}`}
         />
+      ) : usesMallThumb(product) ? (
+        <MallThumb mall={product.mall} compact={size === "sm" || size === "md"} />
       ) : (
         <span className="drop-shadow-sm">{product.emoji}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 사진 없는 링크 상품의 쇼핑몰별 기본 썸네일 카드 (쿠팡·네이버·무신사·29CM·카카오·기타).
+ * 부모 상자를 꽉 채우고, 작은 썸네일(compact)에서는 선물 상자만 그린다
+ */
+export function MallThumb({ mall, compact = false }: { mall?: string; compact?: boolean }) {
+  const t = mallTheme(mall);
+  return (
+    <div
+      role="img"
+      aria-label={`${t.label} 기본 대표 이미지`}
+      data-mall-thumb={t.key}
+      className="relative flex h-full w-full flex-col items-center justify-center"
+      style={{ backgroundColor: t.bg, backgroundImage: `radial-gradient(circle at 50% 38%, #ffffffcc 0, #ffffff00 62%)` }}
+    >
+      <svg viewBox="0 0 64 64" aria-hidden className={compact ? "h-[58%] w-[58%]" : "h-[38%] w-[38%] max-h-36"}>
+        <ellipse cx="32" cy="58" rx="20" ry="3" fill={t.ink} opacity="0.08" />
+        <rect x="10" y="26" width="44" height="30" rx="5" fill={t.accent} />
+        <rect x="6" y="18" width="52" height="11" rx="4" fill={t.accent} />
+        <rect x="6" y="25" width="52" height="4" fill="#000" opacity="0.08" />
+        <rect x="28" y="18" width="8" height="38" fill={t.ribbon} />
+        <path d="M32 18c-3-7-12-11-15-6-2.6 4.2 5 6.4 15 6zM32 18c3-7 12-11 15-6 2.6 4.2-5 6.4-15 6z" fill={t.ribbon} stroke={t.ribbon} strokeWidth="1.5" strokeLinejoin="round" />
+      </svg>
+      {!compact && (
+        <div className="mt-[4%] flex flex-col items-center gap-1 px-4 text-center">
+          <span className="rounded-full bg-white/80 px-3 py-1 text-[13px] font-bold leading-none shadow-[0_1px_2px_rgba(0,0,0,0.06)]" style={{ color: t.ink }}>
+            {t.label}
+          </span>
+          <span className="text-[11px] font-medium text-grey-500">선물 대표 이미지</span>
+        </div>
       )}
     </div>
   );

@@ -12,7 +12,38 @@ export async function fileToDataUrl(file: File, maxSide = 800, quality = 0.85): 
   return canvas.toDataURL("image/jpeg", quality);
 }
 
-const imageKey = (fundingId: string) => `mogiving:image:${fundingId}`;
+/** 직접 올리는 사진 최대 크기 */
+export const MAX_IMAGE_MB = 10;
+
+/** 파일 선택·붙여넣기 공통: 이미지인지·크기를 확인하고 data URL로 읽는다 */
+export async function readImage(file: File): Promise<{ imageUrl: string } | { error: string }> {
+  if (!file.type.startsWith("image/")) return { error: "이미지 파일만 올릴 수 있어요" };
+  if (file.size > MAX_IMAGE_MB * 1024 * 1024) return { error: `${MAX_IMAGE_MB}MB 이하 사진만 올릴 수 있어요` };
+  try {
+    return { imageUrl: await fileToDataUrl(file) };
+  } catch {
+    return { error: "사진을 읽지 못했어요. 다른 사진을 골라주세요" };
+  }
+}
+
+type ClipboardLike = Pick<DataTransfer, "items" | "files"> | null | undefined;
+
+/**
+ * 붙여넣기(Ctrl+V / ⌘V) 내용에서 이미지 파일을 꺼낸다. 없으면 null (글자만 붙여넣은 경우).
+ * 스크린샷 캡처·브라우저 [이미지 복사]는 items에 image/* 파일로 들어오고, 일부 브라우저는 files에만 담는다
+ */
+export function clipboardImage(data: ClipboardLike): File | null {
+  if (!data) return null;
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) return file;
+    }
+  }
+  return Array.from(data.files ?? []).find((f) => f.type.startsWith("image/")) ?? null;
+}
+
+const imageKey =(fundingId: string) => `mogiving:image:${fundingId}`;
 
 /**
  * 직접 올린 사진(data URL)은 공유 링크에 담기엔 너무 커서, 펀딩 id로 이 브라우저에 보관해 둔다.

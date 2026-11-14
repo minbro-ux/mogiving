@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Camera, Check, ExternalLink, Gift, ImageIcon, Link2, Pencil, RotateCw } from "lucide-react";
+import { AlertCircle, Camera, Check, ClipboardPaste, ExternalLink, Gift, ImageIcon, Link2, Pencil, RotateCw } from "lucide-react";
 import { type CrawlErrorCode, type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { won } from "@/lib/format";
-import { fileToDataUrl } from "@/lib/image";
+import { clipboardImage, readImage } from "@/lib/image";
+import { LINK_DEFAULT_EMOJI } from "@/lib/mallThumb";
 import { createFunding } from "@/lib/mock";
 import { firstAvailableOption, optionsKey } from "@/lib/options";
 import type { Funding, Product } from "@/lib/types";
 import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, PurposeFields, optionReady, SafetyNote, ShippingFields, inputClass, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
-import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
+import { Badge, BottomSheet, Button, MallThumb, ProductThumb } from "./ui";
 
-/** 사진을 못 가져왔을 때 고를 수 있는 기본 대표 이미지 */
+/** 사진을 못 가져왔을 때 고를 수 있는 기본 대표 이미지. 첫 칸(🎁)은 쇼핑몰별 기본 썸네일 카드로 보인다 */
 const DEFAULT_IMAGES: Pick<Product, "emoji" | "bg">[] = [
-  { emoji: "🎁", bg: "#EEF3FF" },
+  { emoji: LINK_DEFAULT_EMOJI, bg: "#EEF3FF" },
   { emoji: "👜", bg: "#F6EFEA" },
   { emoji: "👟", bg: "#F1F1F1" },
   { emoji: "💍", bg: "#EFF4FA" },
@@ -22,7 +23,40 @@ const DEFAULT_IMAGES: Pick<Product, "emoji" | "bg">[] = [
   { emoji: "🎧", bg: "#EEF1F5" },
   { emoji: "🕶️", bg: "#F2F0EC" },
 ];
-const MAX_IMAGE_MB = 10;
+
+type PasteNotice = { ok: boolean; text: string } | null;
+
+/** 안내 문구에 쓰는 붙여넣기 단축키 (맥·iOS는 ⌘V) */
+function usePasteKey() {
+  const [key, setKey] = useState("Ctrl+V");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)) setKey("⌘V");
+  }, []);
+  return key;
+}
+
+/**
+ * 시트가 열려 있는 동안 Ctrl+V / ⌘V로 붙여넣은 이미지(스크린샷 캡처·[이미지 복사])를 받아 파일 업로드와 똑같이 처리한다.
+ * 글자만 붙여넣으면 아무것도 하지 않아 링크·상품명 입력칸의 붙여넣기는 그대로 동작한다
+ */
+function usePasteImage(enabled: boolean, onImage: (imageUrl: string) => void, onNotice: (n: PasteNotice) => void) {
+  const handlers = useRef({ onImage, onNotice });
+  handlers.current = { onImage, onNotice };
+  useEffect(() => {
+    if (!enabled) return;
+    const onPaste = async (e: ClipboardEvent) => {
+      const file = clipboardImage(e.clipboardData);
+      if (!file) return;
+      e.preventDefault();
+      const r = await readImage(file);
+      if ("error" in r) return handlers.current.onNotice({ ok: false, text: r.error });
+      handlers.current.onImage(r.imageUrl);
+      handlers.current.onNotice({ ok: true, text: "붙여넣은 사진을 대표 사진으로 등록했어요" });
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [enabled]);
+}
 
 /**
  * 링크 → 상품 정보 바텀시트
@@ -55,8 +89,12 @@ export function LinkImportSheet({
   const [option, setOption] = useState("");
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
   const [purpose, setPurpose] = useState(() => purposeDraft(undefined, round));
+  const [pasteNotice, setPasteNotice] = useState<PasteNotice>(null);
   const prefetchedRef = useRef(prefetched);
   prefetchedRef.current = prefetched;
+
+  // 상품 정보를 다 불러온 뒤부터 붙여넣은 캡처 이미지를 바로 대표 사진으로 쓴다
+  usePasteImage(!!draft, (imageUrl) => setDraft((d) => (d ? { ...d, imageUrl } : d)), setPasteNotice);
 
   // 새 링크가 들어오면 이전 상품 입력값을 비우고, 사용자가 넣은 원래 URL을 링크 칸에 바로 채운다
   useEffect(() => {
@@ -67,6 +105,7 @@ export function LinkImportSheet({
     setOption("");
     setShipping(EMPTY_SHIPPING);
     setPurpose(purposeDraft(undefined, round));
+    setPasteNotice(null);
   }, [link, round]);
 
   useEffect(() => {
@@ -140,7 +179,7 @@ export function LinkImportSheet({
     >
       {result.ok ? (
         <>
-          <ImagePicker product={draft} onChange={set} />
+          <ImagePicker product={draft} onChange={set} notice={pasteNotice} onNotice={setPasteNotice} />
           <div className="mt-4 flex items-center gap-2">
             <Badge tone="green">자동 입력됨</Badge>
             <a href={result.product.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-1 text-[13px] text-grey-500">
@@ -155,7 +194,7 @@ export function LinkImportSheet({
       ) : (
         <>
           <CrawlFailNotice code={result.error.code} onRetry={() => setTarget(parsedUrl ?? { ...link })} />
-          <CaptureUploadButton uploaded={!!draft.imageUrl?.startsWith("data:")} onUpload={(imageUrl) => set({ imageUrl })} />
+          <CaptureUploadButton uploaded={!!draft.imageUrl?.startsWith("data:")} onUpload={(imageUrl) => set({ imageUrl })} notice={pasteNotice} onNotice={setPasteNotice} />
 
           <FormField label="상품 링크" hint={parsedUrl && <span className="text-[12px] text-grey-500">{parsedUrl.mall ?? "기타 쇼핑몰"}</span>}>
             <input value={url} inputMode="url" onChange={(e) => setUrl(e.target.value)} placeholder="https://" className={`${inputClass} !text-[15px]`} />
@@ -176,7 +215,7 @@ export function LinkImportSheet({
             <FeeSummary basePrice={draft.price} />
           </FormField>
           <FormField label="대표 사진">
-            <ImagePicker product={draft} onChange={set} className="!mt-0" />
+            <ImagePicker product={draft} onChange={set} className="!mt-0" onNotice={setPasteNotice} />
           </FormField>
         </>
       )}
@@ -203,7 +242,7 @@ function CrawlFailNotice({ code, onRetry }: { code: CrawlErrorCode; onRetry: () 
         {security ? "쇼핑몰 보안으로 사진을 자동으로 불러오지 못했어요" : "상품 정보를 자동으로 불러오지 못했어요"}
       </p>
       <p className="mt-1.5 pl-[26px] text-[14px] leading-relaxed text-grey-700">
-        상품 화면의 대표 사진을 캡처하거나 저장해서 아래 버튼으로 등록해 주세요!
+        상품 화면의 대표 사진을 캡처해서 아래 버튼으로 올리거나, 이 화면에서 바로 붙여넣어 주세요! 사진이 없으면 쇼핑몰 기본 이미지로 열려요.
       </p>
       <button onClick={onRetry} className="mt-2 flex items-center gap-1 pl-[26px] text-[13px] font-semibold text-grey-500">
         <RotateCw size={13} /> 다시 불러오기
@@ -213,9 +252,9 @@ function CrawlFailNotice({ code, onRetry }: { code: CrawlErrorCode; onRetry: () 
 }
 
 /** 안내 박스 바로 아래의 메인 액션: 갤러리(사진 보관함)에서 캡처한 사진을 고른다 */
-function CaptureUploadButton({ uploaded, onUpload }: { uploaded: boolean; onUpload: (imageUrl: string) => void }) {
+function CaptureUploadButton({ uploaded, onUpload, notice, onNotice }: { uploaded: boolean; onUpload: (imageUrl: string) => void; notice: PasteNotice; onNotice: (n: PasteNotice) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<string | null>(null);
+  const pasteKey = usePasteKey();
   return (
     <div className="mt-3">
       <Button onClick={() => fileRef.current?.click()} variant={uploaded ? "weak" : "primary"}>
@@ -238,12 +277,13 @@ function CaptureUploadButton({ uploaded, onUpload }: { uploaded: boolean; onUplo
         onChange={async (e) => {
           const r = await readImageFile(e);
           if (!r) return;
-          if ("error" in r) return setError(r.error);
-          setError(null);
+          if ("error" in r) return onNotice({ ok: false, text: r.error });
+          onNotice(null);
           onUpload(r.imageUrl);
         }}
       />
-      {error && <p className="mt-2 text-[13px] text-toss-red">{error}</p>}
+      <PasteHint pasteKey={pasteKey} />
+      <NoticeLine notice={notice} />
     </div>
   );
 }
@@ -252,14 +292,24 @@ function CaptureUploadButton({ uploaded, onUpload }: { uploaded: boolean; onUplo
 async function readImageFile(e: React.ChangeEvent<HTMLInputElement>): Promise<{ imageUrl: string } | { error: string } | null> {
   const file = e.target.files?.[0];
   e.target.value = "";
-  if (!file) return null;
-  if (!file.type.startsWith("image/")) return { error: "이미지 파일만 올릴 수 있어요" };
-  if (file.size > MAX_IMAGE_MB * 1024 * 1024) return { error: `${MAX_IMAGE_MB}MB 이하 사진만 올릴 수 있어요` };
-  try {
-    return { imageUrl: await fileToDataUrl(file) };
-  } catch {
-    return { error: "사진을 읽지 못했어요. 다른 사진을 골라주세요" };
-  }
+  return file ? readImage(file) : null;
+}
+
+function PasteHint({ pasteKey }: { pasteKey: string }) {
+  return (
+    <p className="mt-2 flex items-center justify-center gap-1 text-[12px] text-grey-500">
+      <ClipboardPaste size={13} className="shrink-0" /> 클릭하여 업로드 또는 캡처 이미지 붙여넣기 ({pasteKey})
+    </p>
+  );
+}
+
+function NoticeLine({ notice }: { notice: PasteNotice }) {
+  if (!notice) return null;
+  return (
+    <p role="status" className={`mt-2 text-[13px] ${notice.ok ? "text-toss-green" : "text-toss-red"}`}>
+      {notice.text}
+    </p>
+  );
 }
 
 /* --------------------------- 자동 입력값 확인 & 수정 --------------------------- */
@@ -327,17 +377,28 @@ function ImagePicker({
   onChange,
   defaultOpen = false,
   className = "",
+  notice = null,
+  onNotice,
 }: {
   product: Product;
   onChange: (p: Partial<Product>) => void;
   defaultOpen?: boolean;
   className?: string;
+  /** 붙여넣기 결과 안내 */
+  notice?: PasteNotice;
+  onNotice: (n: PasteNotice) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pasteKey = usePasteKey();
+  const uploaded = !!product.imageUrl?.startsWith("data:");
   // 크롤링이 이미지를 못 가져왔거나 잘못 가져와도 바로 고칠 수 있도록 주소 입력칸은 항상 열어 둔다
   const [imageUrlInput, setImageUrlInput] = useState(product.imageUrl?.startsWith("http") ? product.imageUrl : "");
+  // 붙여넣기로 사진이 바뀌면 이전 이미지 주소는 지운다
+  useEffect(() => {
+    if (uploaded) setImageUrlInput("");
+  }, [uploaded, product.imageUrl]);
 
   const applyImageUrl = (raw: string) => {
     setImageUrlInput(raw);
@@ -353,7 +414,10 @@ function ImagePicker({
     }
   };
 
-  const replaceImage = (patch: Partial<Product>) => onChange(patch);
+  const replaceImage = (patch: Partial<Product>) => {
+    onNotice(null);
+    onChange(patch);
+  };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const r = await readImageFile(e);
@@ -367,7 +431,15 @@ function ImagePicker({
   return (
     <div className={`mt-4 ${className}`}>
       <div className="relative">
-        <ProductThumb product={product} size="lg" className="!aspect-[4/3] !rounded-[24px] !text-[80px]" />
+        {/* 썸네일 자체가 업로드 버튼. 붙여넣기(Ctrl+V / ⌘V)는 시트 어디서든 된다 */}
+        <button type="button" onClick={() => fileRef.current?.click()} aria-label="대표 사진 업로드" className="block w-full rounded-[24px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-toss-blue">
+          <ProductThumb product={product} size="lg" className="!aspect-[4/3] !rounded-[24px] !text-[80px]" />
+        </button>
+        {!uploaded && (
+          <span className="pointer-events-none absolute left-3 top-3 flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[12px] font-semibold text-grey-700 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <Camera size={13} /> 클릭하여 업로드 · {pasteKey} 붙여넣기
+          </span>
+        )}
         <div className="absolute bottom-3 right-3 flex gap-1.5">
           <button
             onClick={() => setOpen((o) => !o)}
@@ -382,15 +454,16 @@ function ImagePicker({
         <div className="mt-3 grid grid-cols-8 gap-1.5">
           {DEFAULT_IMAGES.map((d) => {
             const on = !product.imageUrl && product.emoji === d.emoji;
+            const mallCard = d.emoji === LINK_DEFAULT_EMOJI;
             return (
               <button
                 key={d.emoji}
-                aria-label={`기본 이미지 ${d.emoji}`}
+                aria-label={mallCard ? "쇼핑몰 기본 이미지" : `기본 이미지 ${d.emoji}`}
                 onClick={() => replaceImage({ ...d, imageUrl: undefined })}
-                className={`flex aspect-square items-center justify-center rounded-xl text-[20px] transition ${on ? "ring-2 ring-toss-blue" : ""}`}
+                className={`flex aspect-square items-center justify-center overflow-hidden rounded-xl text-[20px] transition ${on ? "ring-2 ring-toss-blue" : ""}`}
                 style={{ backgroundColor: d.bg }}
               >
-                {d.emoji}
+                {mallCard ? <MallThumb mall={product.mall} compact /> : d.emoji}
               </button>
             );
           })}
@@ -416,7 +489,9 @@ function ImagePicker({
           <Camera size={15} /> 사진 업로드
         </button>
       </div>
+      <PasteHint pasteKey={pasteKey} />
       {error && <p className="mt-2 text-[13px] text-toss-red">{error}</p>}
+      <NoticeLine notice={notice} />
     </div>
   );
 }
