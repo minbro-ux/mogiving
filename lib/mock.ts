@@ -27,6 +27,8 @@ export const PRODUCTS: Product[] = [
     category: "디지털/가전",
     mall: "Apple Store",
     url: "https://www.apple.com/kr/shop/buy-airpods/airpods-max-2",
+    // Apple 구입 페이지의 색상 선택지 (dimensionColor) 기준
+    options: ["미드나이트", "스타라이트", "블루", "퍼플", "오렌지"],
     // AirPods Max 2 구입 페이지의 대표 이미지 (전 색상). Apple CDN, CORS 허용·Referer 검사 없음
     imageUrl: "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/airpods-max-hero-select-202409?wid=600&hei=600&fmt=jpeg&qlt=90",
   },
@@ -40,6 +42,8 @@ export const PRODUCTS: Product[] = [
     category: "주얼리",
     mall: "Gucci",
     url: "https://www.gucci.com/kr/ko/pr/jewelry-watches/silver-jewelry/silver-jewelry-for-men/wide-ring-with-web-detail-p-853849J89L08518",
+    // gucci.com은 봇 차단으로 사이즈 목록을 확인하지 못해 국내 반지 호수 기준으로 넣음 (공식 판매 사이즈 확인 필요)
+    options: ["15호", "17호", "19호", "21호"],
     // gucci.com·media.gucci.com은 Akamai 봇 차단(서버/크롤러 요청 403·타임아웃)이라 공식 이미지(800x800)를 직접 저장해 사용
     imageUrl: "/images/gucci-web-detail-wide-ring.jpg",
   },
@@ -66,6 +70,8 @@ export const PRODUCTS: Product[] = [
     category: "패션/의류",
     mall: "K-Village",
     url: "https://www.k-village.co.kr/goods/KMU26543BH",
+    // 케이빌리지 사이즈 재고 API 기준 판매 중인 사이즈 (120은 품절이라 제외)
+    options: ["95(M)", "100(L)", "105(XL)", "110(2XL)", "115(3XL)"],
     // 원본 이미지가 3MB(1500x2000)라 케이빌리지 CDN의 800x800 리사이즈본을 직접 저장해 사용
     imageUrl: "/images/k2-aerosphere-zero-blue-gray.jpg",
   },

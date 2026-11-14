@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { CrawlErrorCode, CrawlResponse, RawMeta } from "@/lib/crawl";
+import { extractOptions } from "./options";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -250,6 +251,7 @@ function extractMeta(html: string, pageUrl: URL): RawMeta {
     brand: pick("product:brand", "og:brand", "brand") ?? (typeof ldBrand === "string" ? ldBrand : typeof (ldBrand as LdNode)?.name === "string" ? ((ldBrand as LdNode).name as string) : undefined),
     siteName: pick("og:site_name"),
     description: pick("og:description", "twitter:description", "description") ?? (typeof ld?.description === "string" ? decodeEntities(ld.description) : undefined),
+    options: extractOptions(html, decodeEntities),
   };
 }
 
@@ -355,7 +357,7 @@ async function fetchMicrolink(target: URL, signal: AbortSignal): Promise<Attempt
   }
 }
 
-const META_KEYS = ["name", "price", "imageUrl", "brand", "siteName", "description"] as const;
+const META_KEYS = ["name", "price", "imageUrl", "brand", "siteName", "description", "options"] as const;
 const isComplete = (m: RawMeta) => !!(m.name && m.imageUrl && m.price);
 
 /** 앞선 시도의 값을 우선하고, 빈 칸만 뒤 시도의 값으로 채운다 */
@@ -364,25 +366,25 @@ function merge(attempts: Attempt[]): Attempt {
   if (!oks.length) return attempts.find((a) => !a.ok && a.code === "blocked") ?? attempts[attempts.length - 1];
   const meta: RawMeta = {};
   for (const k of META_KEYS) {
-    const v = oks.map((a) => a.meta[k]).find((x) => x !== undefined && x !== "");
+    const v = oks.map((a) => a.meta[k]).find((x) => x !== undefined && x !== "" && !(Array.isArray(x) && !x.length));
     if (v !== undefined) (meta as Record<string, unknown>)[k] = v;
   }
   return { ok: true, meta };
 }
 
+const crawlGroup = async (target: URL, group: Record<string, string>[], signal: AbortSignal): Promise<Attempt[]> =>
+  (await Promise.all(group.map((h) => crawl(target, h, signal)))).map((r) => (r.ok ? { ...r, meta: sanitize(r.meta) } : r));
+
 /**
- * 1) Microlink API (봇 차단 우회)
- * 2) 실패·타임아웃이거나 상품명·이미지·가격 중 빈 값이 있으면 내부 파서로 폴백:
- *    카카오톡·페이스북 미리보기 봇 헤더 → 그래도 부족하면 데스크톱·모바일 크롬 헤더 (각 단계는 병렬)
+ * 1) Microlink API (봇 차단 우회) + 카카오톡·페이스북 미리보기 봇 헤더로 직접 파싱 (동시에 시작)
+ *    Microlink는 옵션 목록을 주지 않아, 원본 HTML의 옵션(select·JSON-LD)은 직접 파싱에서만 얻는다
+ * 2) 그래도 상품명·이미지·가격 중 빈 값이 있으면 데스크톱·모바일 크롬 헤더로 폴백 (병렬)
  * 앞 단계에서 얻은 값을 우선하고, 빈 칸만 뒤 단계 값으로 채운다.
  */
 async function crawlWithRetry(target: URL, signal: AbortSignal): Promise<Attempt> {
-  const attempts: Attempt[] = [await fetchMicrolink(target, signal)];
-  for (const group of [BOTS, BROWSERS]) {
-    const current = merge(attempts);
-    if (signal.aborted || (current.ok && isComplete(current.meta))) break;
-    const results = await Promise.all(group.map((h) => crawl(target, h, signal)));
-    attempts.push(...results.map((r) => (r.ok ? { ...r, meta: sanitize(r.meta) } : r)));
-  }
+  const [microlink, bots] = await Promise.all([fetchMicrolink(target, signal), crawlGroup(target, BOTS, signal)]);
+  const attempts: Attempt[] = [microlink, ...bots];
+  const current = merge(attempts);
+  if (!signal.aborted && !(current.ok && isComplete(current.meta))) attempts.push(...(await crawlGroup(target, BROWSERS, signal)));
   return merge(attempts);
 }

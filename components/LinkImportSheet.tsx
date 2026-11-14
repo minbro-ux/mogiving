@@ -7,7 +7,7 @@ import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, PurposeFields, SafetyNote, ShippingFields, inputClass, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, PurposeFields, optionReady, SafetyNote, ShippingFields, inputClass, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 
 /** 사진을 못 가져왔을 때 고를 수 있는 기본 대표 이미지 */
@@ -95,6 +95,10 @@ export function LinkImportSheet({
     return () => controller.abort();
   }, [target]);
 
+  // 다시 불러와 옵션 목록이 바뀌면, 이전 목록에서 고른 값이 화면엔 안 보이는데 선택된 것으로 남지 않게 비운다
+  const optionsKey = draft?.options?.join("|") ?? "";
+  useEffect(() => setOption(""), [optionsKey]);
+
   if (!link) return null;
 
   if (!result || !draft)
@@ -111,7 +115,7 @@ export function LinkImportSheet({
 
   const manual = !result.ok;
   const parsedUrl = parseLink(url);
-  const valid = !!ownerName.trim() && draft.name.trim().length > 1 && draft.price >= 1000 && !!parsedUrl && shippingStatus(shipping) !== "partial";
+  const valid = !!ownerName.trim() && draft.name.trim().length > 1 && draft.price >= 1000 && !!parsedUrl && optionReady(option, draft.options, true) && shippingStatus(shipping) !== "partial";
   const set = (patch: Partial<Product>) => setDraft({ ...draft, ...patch });
 
   const create = () => {
@@ -177,7 +181,7 @@ export function LinkImportSheet({
 
       <PurposeFields value={purpose} round={round} onChange={setPurpose} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />
-      <OptionField value={option} onChange={setOption} />
+      <OptionField key={optionsKey} value={option} onChange={setOption} options={draft.options} allowCustom />
       <PeriodPicker value={days} onChange={setDays} />
       <ShippingFields value={shipping} onChange={setShipping} />
       <SafetyNote />

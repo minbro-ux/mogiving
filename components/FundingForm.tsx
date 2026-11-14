@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle, Ban, Lock, MapPin, PackageCheck } from "lucide-react";
 import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
@@ -182,10 +183,62 @@ export function OwnerNameField({ value, onChange }: { value: string; onChange: (
   );
 }
 
-export function OptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/**
+ * 옵션 입력이 끝났는지. 고를 목록이 있으면 하나를 골라야 하고(allowCustom이면 직접 입력도 허용), 없으면 선택 사항이다
+ */
+export const optionReady = (value: string, options?: string[], allowCustom = false) =>
+  !options?.length || options.includes(value) || (allowCustom && !!value.trim());
+
+/**
+ * 옵션 (색상 / 사이즈 / 용량 등)
+ * - options가 있으면 칩을 눌러 고른다. allowCustom이면 목록이 틀렸을 때를 위해 '직접 입력' 칩을 함께 둔다 (링크 상품)
+ * - options가 없으면 직접 입력칸 (큐레이션 단품은 호출하는 쪽에서 아예 숨긴다)
+ */
+export function OptionField({ value, onChange, options, allowCustom = false }: { value: string; onChange: (v: string) => void; options?: string[]; allowCustom?: boolean }) {
+  const [custom, setCustom] = useState(false);
+  const input = <input value={value} maxLength={40} onChange={(e) => onChange(e.target.value)} placeholder="예) 스페이스 그레이 / 256GB" className={inputClass} />;
+  if (!options?.length)
+    return (
+      <FormField label="옵션 (색상 / 사이즈 / 용량 등)" hint={<span className="text-[12px] text-grey-400">선택</span>}>
+        {input}
+      </FormField>
+    );
+  const chip = (on: boolean) => `min-h-9 rounded-full px-3.5 py-1.5 text-[14px] font-semibold transition ${on ? "bg-toss-blue text-white" : "bg-grey-100 text-grey-600"}`;
   return (
-    <FormField label="옵션 (색상 / 사이즈 / 용량 등)" hint={<span className="text-[12px] text-grey-400">선택</span>}>
-      <input value={value} maxLength={40} onChange={(e) => onChange(e.target.value)} placeholder="예) 스페이스 그레이 / 256GB" className={inputClass} />
+    <FormField label="옵션 선택" hint={<span className="text-[12px] text-toss-blue">필수</span>}>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => {
+          const on = !custom && value === o;
+          return (
+            <button
+              key={o}
+              type="button"
+              aria-pressed={on}
+              onClick={() => {
+                setCustom(false);
+                onChange(o);
+              }}
+              className={chip(on)}
+            >
+              {o}
+            </button>
+          );
+        })}
+        {allowCustom && (
+          <button
+            type="button"
+            aria-pressed={custom}
+            onClick={() => {
+              setCustom(true);
+              onChange("");
+            }}
+            className={chip(custom)}
+          >
+            직접 입력
+          </button>
+        )}
+      </div>
+      {custom && <div className="mt-2">{input}</div>}
     </FormField>
   );
 }

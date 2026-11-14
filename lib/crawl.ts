@@ -23,6 +23,9 @@ const MALLS: [RegExp, string][] = [
 /** 서버 크롤러(/api/crawl) 응답을 기다리는 최대 시간 (서버 자체 제한 8초 + 왕복 여유) */
 const CRAWL_TIMEOUT_MS = 9500;
 
+/** 링크에서 가져온 옵션 칩 최대 개수 (너무 많으면 직접 입력이 낫다) */
+export const MAX_OPTIONS = 30;
+
 export type ParsedLink = { url: string; mall: string | null };
 
 export function parseLink(raw: string): ParsedLink | null {
@@ -61,7 +64,7 @@ export const CRAWL_ERROR_TEXT: Record<CrawlErrorCode, string> = {
 };
 
 /** og:title / og:image / product:price 등에서 뽑아낸 원본 메타데이터 (일부만 있을 수 있음) */
-export type RawMeta = Partial<Pick<Product, "brand" | "name" | "price" | "imageUrl">> & { siteName?: string; description?: string };
+export type RawMeta = Partial<Pick<Product, "brand" | "name" | "price" | "imageUrl" | "options">> & { siteName?: string; description?: string };
 
 /** /api/crawl 응답 */
 export type CrawlResponse = { ok: true; meta: RawMeta } | { ok: false; code: CrawlErrorCode; status?: number };
@@ -121,6 +124,10 @@ export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSign
     signal?.removeEventListener("abort", cancel);
   }
 
+  // 서버 응답을 그대로 믿지 않고 문자열만, 길이·개수 제한을 걸어 쓴다
+  const options = Array.isArray(meta.options)
+    ? Array.from(new Set(meta.options.filter((o): o is string => typeof o === "string").map((o) => o.trim().slice(0, 40)).filter(Boolean))).slice(0, MAX_OPTIONS)
+    : [];
   const product: Product = {
     id: `link-${Date.now()}`,
     brand: meta.brand?.trim() ?? "",
@@ -132,6 +139,7 @@ export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSign
     category: "링크",
     mall: mall ?? meta.siteName ?? "기타 쇼핑몰",
     url,
+    ...(options.length ? { options } : {}),
   };
 
   // 응답은 왔지만 필수 값(상품명·가격)이 비어 있으면 파싱 실패

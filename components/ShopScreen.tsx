@@ -6,7 +6,7 @@ import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
 import { type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FeeSummary, OptionField, OwnerNameField, PeriodPicker, PurposeFields, SafetyNote, ShippingFields, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, OptionField, OwnerNameField, PeriodPicker, PurposeFields, optionReady, SafetyNote, ShippingFields, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
 import { LinkImportSheet } from "./LinkImportSheet";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
 import { WishRequestSheet } from "./WishRequestSheet";
@@ -131,6 +131,8 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
       </section>
 
       <CuratedSheet
+        // 상품을 바꿔 열면 이전 상품에서 고른 옵션 등이 남지 않게 새로 만든다
+        key={picked?.id ?? "none"}
         product={picked}
         onClose={() => setPicked(null)}
         onCreate={(f) => {
@@ -408,7 +410,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
       onClose={onClose}
       footer={
         <Button
-          disabled={!ownerName.trim() || shippingStatus(shipping) === "partial"}
+          disabled={!ownerName.trim() || !optionReady(option, p.options) || shippingStatus(shipping) === "partial"}
           onClick={() => onCreate(createFunding(p, { ...purposeText(purpose), ownerName, days, option, shipping: toShipping(shipping) }))}
         >
           <Gift size={20} /> 이 추천 상품으로 펀딩 열기
@@ -432,7 +434,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
       <FeeSummary basePrice={p.price} />
       <PurposeFields value={purpose} onChange={setPurpose} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />
-      <OptionField value={option} onChange={setOption} />
+      {!!p.options?.length && <OptionField value={option} onChange={setOption} options={p.options} />}
       <PeriodPicker value={days} onChange={setDays} />
       <ShippingFields value={shipping} onChange={setShipping} />
       <SafetyNote />
