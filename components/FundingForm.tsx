@@ -6,7 +6,8 @@ import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
 import { FUNDING_PERIOD_DAYS } from "@/lib/policy";
 import { DEFAULT_PURPOSE, FUNDING_PURPOSES, type FundingPurpose, MESSAGE_MAX, TITLE_MAX, presetTitle, purposePreset } from "@/lib/purpose";
-import type { ShippingAddress } from "@/lib/types";
+import { toOptionItems } from "@/lib/options";
+import type { ProductOption, ShippingAddress } from "@/lib/types";
 import { PostcodeFields, cleanZonecode } from "./AddressSearch";
 
 /* ------------------------- 펀딩 개설 시트 공통 폼 요소 ------------------------- */
@@ -184,20 +185,26 @@ export function OwnerNameField({ value, onChange }: { value: string; onChange: (
 }
 
 /**
- * 옵션 입력이 끝났는지. 고를 목록이 있으면 하나를 골라야 하고(allowCustom이면 직접 입력도 허용), 없으면 선택 사항이다
+ * 옵션 입력이 끝났는지. 고를 목록이 있으면 구매 가능한 옵션 하나를 골라야 하고(allowCustom이면 직접 입력도 허용), 없으면 선택 사항이다
  */
-export const optionReady = (value: string, options?: string[], allowCustom = false) =>
-  !options?.length || options.includes(value) || (allowCustom && !!value.trim());
+export function optionReady(value: string, options?: ProductOption[], allowCustom = false) {
+  const items = toOptionItems(options);
+  if (!items.length) return true;
+  const picked = items.find((o) => o.label === value);
+  if (picked) return !picked.soldOut;
+  return allowCustom && !!value.trim();
+}
 
 /**
  * 옵션 (색상 / 사이즈 / 용량 등)
  * - options가 있으면 칩을 눌러 고른다. allowCustom이면 목록이 틀렸을 때를 위해 '직접 입력' 칩을 함께 둔다 (링크 상품)
  * - options가 없으면 직접 입력칸 (큐레이션 단품은 호출하는 쪽에서 아예 숨긴다)
  */
-export function OptionField({ value, onChange, options, allowCustom = false }: { value: string; onChange: (v: string) => void; options?: string[]; allowCustom?: boolean }) {
+export function OptionField({ value, onChange, options, allowCustom = false }: { value: string; onChange: (v: string) => void; options?: ProductOption[]; allowCustom?: boolean }) {
   const [custom, setCustom] = useState(false);
+  const items = toOptionItems(options);
   const input = <input value={value} maxLength={40} onChange={(e) => onChange(e.target.value)} placeholder="예) 스페이스 그레이 / 256GB" className={inputClass} />;
-  if (!options?.length)
+  if (!items.length)
     return (
       <FormField label="옵션 (색상 / 사이즈 / 용량 등)" hint={<span className="text-[12px] text-grey-400">선택</span>}>
         {input}
@@ -207,23 +214,35 @@ export function OptionField({ value, onChange, options, allowCustom = false }: {
   return (
     <FormField label="옵션 선택" hint={<span className="text-[12px] text-toss-blue">필수</span>}>
       <div className="flex flex-wrap gap-2">
-        {options.map((o) => {
-          const on = !custom && value === o;
-          return (
+        {items.map((o) =>
+          o.soldOut ? (
+            // 품절: 보여주기만 하고 누를 수 없다 (disabled라 클릭·키보드 선택 모두 막힘)
             <button
-              key={o}
+              key={o.label}
               type="button"
-              aria-pressed={on}
+              disabled
+              aria-disabled
+              aria-label={`${o.label} 품절`}
+              className="min-h-9 cursor-not-allowed rounded-full bg-grey-50 px-3.5 py-1.5 text-[14px] font-medium text-grey-300"
+            >
+              <span className="line-through">{o.label}</span>
+              <span className="ml-1 text-[11px]">품절</span>
+            </button>
+          ) : (
+            <button
+              key={o.label}
+              type="button"
+              aria-pressed={!custom && value === o.label}
               onClick={() => {
                 setCustom(false);
-                onChange(o);
+                onChange(o.label);
               }}
-              className={chip(on)}
+              className={chip(!custom && value === o.label)}
             >
-              {o}
+              {o.label}
             </button>
-          );
-        })}
+          ),
+        )}
         {allowCustom && (
           <button
             type="button"
@@ -239,6 +258,7 @@ export function OptionField({ value, onChange, options, allowCustom = false }: {
         )}
       </div>
       {custom && <div className="mt-2">{input}</div>}
+      {!items.some((o) => !o.soldOut) && <p className="mt-2 text-[13px] text-toss-red">모든 옵션이 품절이라 지금은 펀딩을 열 수 없어요{allowCustom ? ". 다른 옵션은 직접 입력해 주세요" : ""}</p>}
     </FormField>
   );
 }

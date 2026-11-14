@@ -6,6 +6,7 @@ import { type CrawlErrorCode, type CrawlResult, type ParsedLink, crawlProduct, p
 import { won } from "@/lib/format";
 import { fileToDataUrl } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
+import { firstAvailableOption, optionsKey } from "@/lib/options";
 import type { Funding, Product } from "@/lib/types";
 import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, PurposeFields, optionReady, SafetyNote, ShippingFields, inputClass, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
 import { Badge, BottomSheet, Button, ProductThumb } from "./ui";
@@ -95,9 +96,10 @@ export function LinkImportSheet({
     return () => controller.abort();
   }, [target]);
 
-  // 다시 불러와 옵션 목록이 바뀌면, 이전 목록에서 고른 값이 화면엔 안 보이는데 선택된 것으로 남지 않게 비운다
-  const optionsKey = draft?.options?.join("|") ?? "";
-  useEffect(() => setOption(""), [optionsKey]);
+  // 옵션 목록이 새로 오면(처음 불러오기·다시 시도) 품절이 아닌 첫 번째 옵션을 골라 둔다.
+  // 이전 목록에서 고른 값이 화면엔 안 보이는데 선택된 것으로 남지 않게 한다
+  const optKey = optionsKey(draft?.options);
+  useEffect(() => setOption(firstAvailableOption(draft?.options)), [optKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!link) return null;
 
@@ -181,7 +183,7 @@ export function LinkImportSheet({
 
       <PurposeFields value={purpose} round={round} onChange={setPurpose} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />
-      <OptionField key={optionsKey} value={option} onChange={setOption} options={draft.options} allowCustom />
+      <OptionField key={optKey} value={option} onChange={setOption} options={draft.options} allowCustom />
       <PeriodPicker value={days} onChange={setDays} />
       <ShippingFields value={shipping} onChange={setShipping} />
       <SafetyNote />

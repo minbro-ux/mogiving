@@ -1,3 +1,4 @@
+import { toOptionItems, toProductOptions } from "./options";
 import type { Product } from "./types";
 
 /** 링크 등록을 지원하는 쇼핑몰 (도메인 → 표시 이름) */
@@ -124,10 +125,8 @@ export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSign
     signal?.removeEventListener("abort", cancel);
   }
 
-  // 서버 응답을 그대로 믿지 않고 문자열만, 길이·개수 제한을 걸어 쓴다
-  const options = Array.isArray(meta.options)
-    ? Array.from(new Set(meta.options.filter((o): o is string => typeof o === "string").map((o) => o.trim().slice(0, 40)).filter(Boolean))).slice(0, MAX_OPTIONS)
-    : [];
+  // 서버 응답을 그대로 믿지 않고 { label, soldOut } 형태만, 길이·개수 제한을 걸어 쓴다
+  const options = toProductOptions(toOptionItems(meta.options).slice(0, MAX_OPTIONS));
   const product: Product = {
     id: `link-${Date.now()}`,
     brand: meta.brand?.trim() ?? "",

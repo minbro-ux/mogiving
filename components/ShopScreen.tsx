@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, ChevronLeft, ChevronRight, Gift, Link2, Loader2, PackageCheck, Pencil, Search, Sparkles, Star } from "lucide-react";
 import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
+import { firstAvailableOption } from "@/lib/options";
 import { type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
@@ -399,7 +400,8 @@ function ProductCard({ product: p, onClick }: { product: Product; onClick: () =>
 function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | null; onClose: () => void; onCreate: (f: Funding) => void }) {
   const [ownerName, setOwnerName] = useState("");
   const [days, setDays] = useState(7);
-  const [option, setOption] = useState("");
+  // 품절이 아닌 첫 번째 옵션을 미리 골라 둔다 (상품이 바뀌면 key로 시트를 새로 만든다)
+  const [option, setOption] = useState(() => firstAvailableOption(p?.options));
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
   const [purpose, setPurpose] = useState(() => purposeDraft());
   if (!p) return null;

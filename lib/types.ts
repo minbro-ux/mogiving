@@ -1,4 +1,7 @@
 import type { FundingPurpose } from "./purpose";
+
+/** 상품 옵션 항목. 문자열(구매 가능) 또는 품절 여부를 담은 객체 */
+export type ProductOption = string | { label: string; soldOut?: boolean };
 export type Product = {
   id: string;
   brand: string;
@@ -14,8 +17,11 @@ export type Product = {
   url?: string;
   /** 선택한 옵션 (색상 / 사이즈 / 용량 등). 친구 화면에도 보인다 */
   option?: string;
-  /** 고를 수 있는 옵션 목록. 있으면 개설 화면에서 칩으로 고르고, 없으면 큐레이션 상품은 옵션 칸을 숨기고 링크 상품은 직접 입력한다 */
-  options?: string[];
+  /**
+   * 고를 수 있는 옵션 목록. 있으면 개설 화면에서 칩으로 고르고, 없으면 큐레이션 상품은 옵션 칸을 숨기고 링크 상품은 직접 입력한다.
+   * 문자열은 구매 가능한 옵션, { label, soldOut: true }는 화면에 보이지만 고를 수 없는 품절 옵션
+   */
+  options?: ProductOption[];
   /** 사용자가 올린 상품 이미지 (없으면 emoji 썸네일) */
   imageUrl?: string;
   /** 운영자 추천 큐레이션 상품 여부 */
