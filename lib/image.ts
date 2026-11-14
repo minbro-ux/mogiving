@@ -1,3 +1,5 @@
+import { linkOrigin } from "./site";
+
 /** 업로드 사진을 긴 변 기준으로 줄여 data URL(JPEG)로 바꾼다. blob: 주소와 달리 해제·새 탭에도 깨지지 않는다 */
 export async function fileToDataUrl(file: File, maxSide = 800, quality = 0.85): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -43,7 +45,30 @@ export function clipboardImage(data: ClipboardLike): File | null {
   return Array.from(data.files ?? []).find((f) => f.type.startsWith("image/")) ?? null;
 }
 
-const imageKey =(fundingId: string) => `mogiving:image:${fundingId}`;
+/** 서버 업로드를 기다리는 최대 시간. 넘으면 이 기기에만 사진을 두고 진행한다 */
+const UPLOAD_TIMEOUT_MS = 10_000;
+
+/**
+ * 직접 올린 사진(data URL)을 서버(/api/image)에 저장하고, 공유 링크에 담을 수 있는 절대 주소를 돌려준다.
+ * 실패하면 null (호출하는 쪽은 data URL을 그대로 쓴다)
+ */
+export async function uploadImage(dataUrl: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const res = await fetch("/api/image", { method: "POST", headers: { "Content-Type": blob.type || "image/jpeg" }, body: blob, signal: controller.signal });
+    if (!res.ok) return null;
+    const { path } = (await res.json()) as { path?: unknown };
+    return typeof path === "string" && path.startsWith("/api/image/") ? new URL(path, linkOrigin()).toString() : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const imageKey = (fundingId: string) => `mogiving:image:${fundingId}`;
 
 /**
  * 직접 올린 사진(data URL)은 공유 링크에 담기엔 너무 커서, 펀딩 id로 이 브라우저에 보관해 둔다.

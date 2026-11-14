@@ -7,7 +7,7 @@ import { ResolutionSheet } from "@/components/ResolutionSheet";
 import { ShopScreen } from "@/components/ShopScreen";
 import { Toast } from "@/components/ui";
 import { sumAmount } from "@/lib/mock";
-import { recallUploadedImage, rememberUploadedImage } from "@/lib/image";
+import { recallUploadedImage, rememberUploadedImage, uploadImage } from "@/lib/image";
 import { applySummary, fetchContributionSummary, recallMyContributions, requestDelivery } from "@/lib/contribute";
 import { refundFunding, startTossPayment } from "@/lib/payment";
 import { type ShortLink, fundingShareUrl, recallOwnerKey, registerShortLink, shareFunding, shortShareUrl, toStoredPayload } from "@/lib/share";
@@ -68,10 +68,32 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   const currentFundingId = useRef(funding?.id);
   currentFundingId.current = funding?.id;
 
+  /*
+   * 이 기기에서 방금 만든 펀딩의 직접 올린 사진(data URL)은 서버에 올려 공개 주소로 바꾼다.
+   * 그래야 공유 링크를 다른 기기에서 열어도 사진이 보인다. 업로드가 끝날 때까지 짧은 링크 발급을 미뤄
+   * 사진 없는 링크가 먼저 만들어졌다가 같은 펀딩에 링크가 두 개 생기는 일을 막는다 (실패·10초 초과 시 사진 없이 발급)
+   */
+  const ownCreated = !!funding && funding.id !== initialFunding?.id;
+  const dataImage = ownCreated && funding?.product.imageUrl?.startsWith("data:") ? funding.product.imageUrl : null;
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const imageUploadPending = !!dataImage && dataImage !== failedImage;
+  const uploadingImage = useRef<string | null>(null);
+  useEffect(() => {
+    if (!imageUploadPending || !dataImage || !funding || uploadingImage.current === dataImage) return;
+    const id = funding.id;
+    uploadingImage.current = dataImage;
+    uploadImage(dataImage).then((url) => {
+      uploadingImage.current = null;
+      if (!url) return setFailedImage(dataImage);
+      setFunding((f) => (f && f.id === id && f.product.imageUrl === dataImage ? { ...f, product: { ...f.product, imageUrl: url } } : f));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataImage, imageUploadPending]);
+
   // 공유 버튼을 누르는 순간 바로 공유 시트를 띄울 수 있게, 펀딩이 열리거나 달성률이 바뀔 때 미리 발급·갱신해 둔다
   const sharePayloadKey = funding ? JSON.stringify(toStoredPayload(funding)) : null;
   useEffect(() => {
-    if (!funding) return;
+    if (!funding || imageUploadPending) return;
     const prev = shortLinkRef.current?.fundingId === funding.id ? shortLinkRef.current : null;
     // 짧은 링크로 들어온 친구 화면: 남의 링크는 갱신 권한(key)이 없으니 받은 링크를 그대로 쓴다
     if (prev && !prev.key) return;
@@ -82,7 +104,7 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
       else setShortLinkFailed(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sharePayloadKey]);
+  }, [sharePayloadKey, imageUploadPending]);
 
   /** 모든 공유 버튼이 쓰는 링크. 발급 전이면 null, 발급 실패 시에만 긴 링크로 대체 */
   const shareUrl =
@@ -151,6 +173,8 @@ export function App({ initialFunding, initialRole = "owner", initialShareId }: {
   const share = async () => {
     if (!funding) return;
     let url = shareUrl;
+    // 사진 업로드가 끝나면 링크가 바로 발급된다. 여기서 따로 발급하면 같은 펀딩에 링크가 두 개 생긴다
+    if (!url && imageUploadPending) return showToast("사진을 올리고 있어요. 잠시 후 다시 눌러주세요");
     if (!url) {
       const r = await registerShortLink(funding);
       url = r ? shortShareUrl(r.id) : fundingShareUrl(funding);
