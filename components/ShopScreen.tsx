@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ChevronLeft, ChevronRight, Gift, Link2, Loader2, PackageCheck, Pencil, Search, Sparkles, Star } from "lucide-react";
 import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
 import { firstAvailableOption } from "@/lib/options";
-import { type CrawlResult, type ParsedLink, crawlProduct, parseLink } from "@/lib/crawl";
+import { type CrawlResult, type ParsedLink, crawlProduct, linkKey, parseLinkInput } from "@/lib/crawl";
 import { discountRate, won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
 import { EMPTY_SHIPPING, FeeSummary, OptionField, OwnerNameField, PeriodPicker, PurposeFields, optionReady, SafetyNote, ShippingFields, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
@@ -179,57 +179,67 @@ function LinkImportSection({ onImport }: { onImport: OnImport }) {
 const AUTO_FETCH_DELAY_MS = 450;
 
 /** 타이핑 도중 "https://cou" 같은 미완성 주소로 요청하지 않도록, 도메인(.com 등)과 경로까지 들어간 주소만 자동으로 불러온다 */
-function looksComplete(v: string) {
-  const t = v.trim();
-  return /^(https?:\/\/)?[^\s/]+\.[a-z]{2,}\/\S+$/i.test(t);
+function looksComplete(url: string) {
+  return /^(https?:\/\/)?[^\s/]+\.[a-z]{2,}\/\S+$/i.test(url.trim());
 }
 
 type Preview = { link: ParsedLink; result: CrawlResult | null };
 
 /**
  * 상품 링크 입력 + 붙여넣기 (메인 섹션과 2탄 모금함 시트에서 공용)
- * 링크를 붙여넣거나 입력하면 서버(/api/crawl)에서 og:image·og:title을 받아 바로 아래 미리보기 카드에 보여준다.
+ * 주소만 넣어도, 쇼핑몰 앱의 [공유하기 → 복사] 글을 통째로 붙여넣어도 된다 (lib/shareText.ts가 링크·쇼핑몰·상품명·가격을 나눔).
+ * 링크가 보이면 서버(/api/crawl)에서 og:image 등을 받아 미리보기 카드에 보여주고, 글에서 뽑은 값은 크롤링 값보다 우선한다.
  * 불러오기에 실패해도 '직접 입력하기'로 상품명·사진을 손으로 채우는 시트로 이어진다.
  */
 function LinkInputForm({ onImport }: { onImport: OnImport }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+  /** 붙여넣기는 입력이 끝난 것이므로 기다리지 않고 바로 불러온다 */
+  const pastedRef = useRef(false);
 
-  // 입력이 멈추면 자동으로 메타데이터를 불러온다. 링크가 바뀌면 이전 요청은 취소
+  const parsed = useMemo(() => {
+    const link = parseLinkInput(value);
+    return link && looksComplete(link.url) ? link : null;
+  }, [value]);
+  const key = parsed ? linkKey(parsed) : "";
+
+  // 입력이 멈추면(붙여넣기는 즉시) 자동으로 메타데이터를 불러온다. 링크나 글에서 뽑은 값이 바뀌면 이전 요청은 취소
   useEffect(() => {
-    const parsed = looksComplete(value) ? parseLink(value) : null;
     if (!parsed) {
       setPreview(null);
       return;
     }
     const controller = new AbortController();
+    const delay = pastedRef.current ? 0 : AUTO_FETCH_DELAY_MS;
+    pastedRef.current = false;
     const timer = setTimeout(() => {
       setPreview({ link: parsed, result: null });
       crawlProduct(parsed, controller.signal).then((result) => {
         if (!controller.signal.aborted) setPreview({ link: parsed, result });
       });
-    }, AUTO_FETCH_DELAY_MS);
+    }, delay);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [value]);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = (raw = value) => {
-    const parsed = parseLink(raw);
-    if (!parsed) {
-      setError("올바른 상품 링크를 입력해주세요");
+    const link = parseLinkInput(raw);
+    if (!link) {
+      setError("상품 링크를 찾지 못했어요. 링크가 들어 있는지 확인해 주세요");
       return;
     }
     setError(null);
     // 이미 불러온 미리보기가 있으면 다시 크롤링하지 않고 그대로 넘긴다
-    onImport(parsed, preview?.link.url === parsed.url ? preview.result ?? undefined : undefined);
+    onImport(link, preview && linkKey(preview.link) === linkKey(link) ? preview.result ?? undefined : undefined);
   };
 
   const paste = async () => {
     try {
       const text = (await navigator.clipboard.readText()).trim();
+      pastedRef.current = true;
       setValue(text);
       setError(null);
     } catch {
@@ -238,28 +248,40 @@ function LinkInputForm({ onImport }: { onImport: OnImport }) {
   };
 
   const loading = !!preview && !preview.result;
+  // 공유 글처럼 여러 줄이거나 길면 펼쳐서 보여준다
+  const multiline = value.includes("\n") || value.length > 60;
 
   return (
     <>
       <div
-        className={`mt-4 flex items-center gap-2 rounded-2xl bg-white py-1.5 pl-3.5 pr-1.5 ring-2 transition ${
+        className={`mt-4 flex items-start gap-2 rounded-2xl bg-white py-1.5 pl-3.5 pr-1.5 ring-2 transition ${
           error ? "ring-toss-red" : "ring-transparent focus-within:ring-toss-blue"
         }`}
       >
-        {loading ? <Loader2 size={18} className="shrink-0 animate-spin text-toss-blue" /> : <Link2 size={18} className="shrink-0 text-grey-400" />}
-        <input
+        {loading ? <Loader2 size={18} className="mt-[11px] shrink-0 animate-spin text-toss-blue" /> : <Link2 size={18} className="mt-[11px] shrink-0 text-grey-400" />}
+        <textarea
           value={value}
-          inputMode="url"
+          rows={multiline ? 4 : 1}
+          onPaste={() => {
+            pastedRef.current = true;
+          }}
           onChange={(e) => {
             setValue(e.target.value);
             setError(null);
           }}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="https://"
-          className="min-w-0 flex-1 bg-transparent text-[15px] text-grey-900 outline-none placeholder:text-grey-400"
+          onKeyDown={(e) => {
+            // Enter는 가져오기, Shift+Enter는 줄바꿈 (한글 조합 중 Enter는 무시)
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="상품 링크 또는 쇼핑몰에서 복사한 내용을 붙여넣으세요"
+          aria-label="상품 링크 또는 쇼핑몰 공유 내용"
+          className="min-w-0 flex-1 resize-none bg-transparent py-2 text-[15px] leading-6 text-grey-900 outline-none placeholder:text-grey-400"
         />
         {!value && (
-          <button onClick={paste} className="shrink-0 px-2 text-[13px] font-semibold text-grey-500">
+          <button onClick={paste} className="h-10 shrink-0 px-2 text-[13px] font-semibold text-grey-500">
             붙여넣기
           </button>
         )}
@@ -287,7 +309,15 @@ function LinkPreviewCard({ preview: { link, result }, onConfirm }: { preview: Pr
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-grey-500">{link.mall ?? "쇼핑몰"}</p>
-          <p className="mt-0.5 text-[15px] font-semibold text-grey-700">상품 정보를 불러오고 있어요…</p>
+          {link.seed?.name ? (
+            <>
+              <p className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug text-grey-900">{link.seed.name}</p>
+              {!!link.seed.price && <p className="mt-1 text-[15px] font-bold text-grey-900">{won(link.seed.price)}</p>}
+              <p className="mt-1 text-[12px] text-grey-500">사진을 불러오고 있어요…</p>
+            </>
+          ) : (
+            <p className="mt-0.5 text-[15px] font-semibold text-grey-700">상품 정보를 불러오고 있어요…</p>
+          )}
         </div>
       </div>
     );

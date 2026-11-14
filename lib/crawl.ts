@@ -1,4 +1,5 @@
 import { toOptionItems, toProductOptions } from "./options";
+import { parseShareText } from "./shareText";
 import type { Product } from "./types";
 
 /** 링크 등록을 지원하는 쇼핑몰 (도메인 → 표시 이름) */
@@ -8,8 +9,10 @@ const MALLS: [RegExp, string][] = [
   [/29cm\.co\.kr$/, "29CM"],
   [/kream\.co\.kr$/, "KREAM"],
   [/oliveyoung\.co\.kr$/, "올리브영"],
-  [/smartstore\.naver\.com$|brand\.naver\.com$|shopping\.naver\.com$/, "네이버 스마트스토어"],
+  // naver.me: 네이버 쇼핑 앱 [공유하기]가 만드는 짧은 링크
+  [/smartstore\.naver\.com$|brand\.naver\.com$|shopping\.naver\.com$|^naver\.me$/, "네이버 스마트스토어"],
   [/gift\.kakao\.com$/, "카카오톡 선물하기"],
+  [/store\.kakao\.com$/, "카카오톡 쇼핑하기"],
   [/ssg\.com$/, "SSG.COM"],
   [/11st\.co\.kr$/, "11번가"],
   [/wconcept\.co\.kr$/, "W컨셉"],
@@ -21,13 +24,39 @@ const MALLS: [RegExp, string][] = [
   [/dior\.com$/, "디올"],
 ];
 
+/**
+ * 입력창 내용 → 링크. 주소만 넣었든 쇼핑몰 [공유하기 → 복사] 글을 통째로 넣었든 받는다.
+ * - 글 안의 첫 http(s) 주소를 링크로, 도메인으로 쇼핑몰을 정하고 모르면 [쿠팡] 같은 표기를 쓴다
+ * - 글에 상품명·가격이 있으면 seed로 함께 넘긴다
+ * - http 주소가 없으면 예전처럼 "coupang.com/vp/…" 같은 주소 한 줄만 받는다
+ */
+export function parseLinkInput(raw: string): ParsedLink | null {
+  const share = parseShareText(raw);
+  if (!share.url) return /\s/.test(raw.trim()) ? null : parseLink(raw);
+  const link = parseLink(share.url);
+  if (!link) return null;
+  const seed = { ...(share.name ? { name: share.name } : {}), ...(share.price ? { price: share.price } : {}) };
+  return { url: link.url, mall: link.mall ?? share.mall ?? null, ...(seed.name || seed.price ? { seed } : {}) };
+}
+
+/** 같은 입력인지 비교하는 키 (링크·쇼핑몰·글에서 뽑은 값까지) */
+export const linkKey = (l: ParsedLink) => [l.url, l.mall ?? "", l.seed?.name ?? "", l.seed?.price ?? ""].join("|");
+
 /** 서버 크롤러(/api/crawl) 응답을 기다리는 최대 시간 (서버 자체 제한 8초 + 왕복 여유) */
 const CRAWL_TIMEOUT_MS = 9500;
 
 /** 링크에서 가져온 옵션 칩 최대 개수 (너무 많으면 직접 입력이 낫다) */
 export const MAX_OPTIONS = 30;
 
-export type ParsedLink = { url: string; mall: string | null };
+export type ParsedLink = {
+  url: string;
+  mall: string | null;
+  /**
+   * 공유 텍스트를 통째로 붙여넣었을 때 글에서 뽑은 상품명·가격.
+   * 크롤링 결과보다 우선하고, 크롤링이 막혀도 그대로 남는다 (크롤링은 빈 칸만 채움)
+   */
+  seed?: { name?: string; price?: number };
+};
 
 export function parseLink(raw: string): ParsedLink | null {
   const text = raw.trim();
@@ -109,7 +138,7 @@ export type CrawlResult = (
  * 9.5초 안에 응답이 없으면 요청 자체를 끊고(AbortController) 바로 실패로 돌려준다.
  * signal: 시트를 닫거나 링크를 바꿔 결과가 더 필요 없을 때 진행 중인 요청을 취소
  */
-export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSignal): Promise<CrawlResult> {
+export async function crawlProduct({ url, mall, seed }: ParsedLink, signal?: AbortSignal): Promise<CrawlResult> {
   let meta: RawMeta = {};
   let error: { code: CrawlErrorCode; status?: number } | null = null;
   const controller = new AbortController();
@@ -130,8 +159,9 @@ export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSign
   const product: Product = {
     id: `link-${Date.now()}`,
     brand: meta.brand?.trim() ?? "",
-    name: cleanTitle(meta.name, [meta.siteName, mall]),
-    price: meta.price && meta.price > 0 ? meta.price : 0,
+    // 붙여넣은 글에서 뽑은 상품명·가격이 우선이고, 크롤링 값은 빈 칸만 채운다
+    name: seed?.name || cleanTitle(meta.name, [meta.siteName, mall]),
+    price: seed?.price || (meta.price && meta.price > 0 ? meta.price : 0),
     emoji: "🎁",
     bg: "#EEF3FF",
     imageUrl: meta.imageUrl && /^https?:\/\//.test(meta.imageUrl) ? meta.imageUrl : undefined,
@@ -143,6 +173,8 @@ export async function crawlProduct({ url, mall }: ParsedLink, signal?: AbortSign
 
   // 응답은 왔지만 필수 값(상품명·가격)이 비어 있으면 파싱 실패
   if (!error && (!product.name || !product.price)) error = { code: "parse" };
+  // 쿠팡처럼 크롤링이 막혀도 붙여넣은 글에 상품명·가격이 다 있었으면 그대로 진행한다 (사진은 직접 고르면 된다)
+  if (error && seed?.name && seed.price) error = null;
   const description = meta.description?.trim() || undefined;
   return error ? { ok: false, product, error, description } : { ok: true, product, description };
 }
