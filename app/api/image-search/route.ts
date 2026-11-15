@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getGlobalRateLimiter } from "@/lib/globalRateLimit";
 import { searchProductImage } from "@/lib/kakaoImage";
 import { clientIp, createRateLimiter } from "@/lib/rateLimit";
 
@@ -16,6 +17,18 @@ const MAX_QUERY = 120;
 const perIp = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 20 });
 const overall = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, maxKeys: 1 });
 
+/**
+ * 모든 인스턴스를 합친 하루 상한 (Supabase 카운터, 매일 0시 KST에 새로 셈).
+ * KAKAO_IMAGE_SEARCH_DAILY_LIMIT로 바꿀 수 있고, 잘못된 값이면 기본값을 쓴다
+ */
+const DEFAULT_DAILY_LIMIT = 3000;
+const dailyLimit = () => {
+  // 빈 값("")은 Number로 0이 되어 전부 막히므로 숫자만 받는다
+  const raw = process.env.KAKAO_IMAGE_SEARCH_DAILY_LIMIT?.trim() ?? "";
+  return /^\d+$/.test(raw) ? Number(raw) : DEFAULT_DAILY_LIMIT;
+};
+const DAY_SECONDS = 24 * 60 * 60;
+
 export type ImageSearchResponse = { imageUrl?: string };
 
 const empty = (status = 200) => NextResponse.json<ImageSearchResponse>({}, { status, headers: { "Cache-Control": "no-store" } });
@@ -30,6 +43,8 @@ export async function GET(req: NextRequest) {
   if (!q || q.length > MAX_QUERY || !process.env.KAKAO_REST_API_KEY) return empty();
   // 실제로 카카오를 호출할 요청만 센다. 제한에 걸려도 본문은 빈 결과라 화면은 기본 썸네일로 자연스럽게 넘어간다
   if (perIp(clientIp(req.headers)) || overall("all")) return empty(429);
+  // 전체 상한은 메모리 제한을 통과한 요청만 센다. Supabase를 못 쓰면("unknown") 막지 않고 메모리 제한만 적용된다
+  if ((await getGlobalRateLimiter()("kakao-image-search", DAY_SECONDS, dailyLimit())) === "limited") return empty(429);
   const imageUrl = await searchProductImage(q, { signal: req.signal });
   if (!imageUrl) return empty();
   // 같은 상품명은 하루 동안 CDN 캐시를 써 카카오 API 호출을 아낀다 (캐시 응답은 이 함수를 거치지 않아 제한에도 세지 않음)
