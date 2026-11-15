@@ -1,7 +1,9 @@
+import { type ImageType, MAX_IMAGE_BYTES, sniffImageType } from "./imageStore";
 import { isPublicHttpUrl } from "./publicUrl";
 
 /**
- * 쇼핑몰 크롤링이 막혀 대표 사진을 못 가져왔을 때, 상품명으로 카카오 이미지 검색을 해 가장 그럴듯한 사진 한 장을 고른다.
+ * 쇼핑몰 크롤링이 막혀 대표 사진을 못 가져왔을 때, 상품명으로 카카오 이미지 검색을 해 가장 그럴듯한 사진 한 장을 고르고
+ * 서버가 직접 내려받는다. 받은 사진은 우리 저장소(/api/image/[id])에 넣어 내보내므로 브라우저 핫링크 차단과 무관하게 보인다.
  * 서버 전용 (KAKAO_REST_API_KEY). 어떤 실패도 throw하지 않고 undefined를 돌려준다 → 화면은 쇼핑몰 기본 썸네일 카드 그대로.
  */
 
@@ -15,14 +17,37 @@ export type KakaoImageDoc = {
   doc_url?: string;
 };
 
-/** 쇼핑몰 상품 사진 CDN (이미지 주소의 호스트에 포함되면 실제 상품 사진일 가능성이 높다) */
-const MALL_CDN = ["coupangcdn", "pstatic.net", "musinsa", "29cm", "zigzag", "ssgcdn", "lotteon", "gmarket", "11st", "auction", "oliveyoung", "wconcept", "kream"];
+/** 핫링크(Referer)를 막는 네이버 블로그·카페 이미지 서버: 후보에서 뺀다 */
+const HOTLINK_BLOCKED_HOSTS = ["postfiles.pstatic.net", "blogfiles.pstatic.net", "cafeptthumb-phinf.pstatic.net"];
+
+/** 쇼핑몰 공식 상품 사진 CDN (호스트가 이것이거나 이것의 하위 도메인이면 1순위 후보) */
+const OFFICIAL_CDN_HOSTS = [
+  "shopping-phinf.pstatic.net",
+  "shop-phinf.pstatic.net",
+  "coupangcdn.com",
+  "image.musinsa.com",
+  "img.29cm.co.kr",
+  "cf.product-image.s.zigzag.kr",
+  "sitem.ssgcdn.com",
+  "ssgcdn.com",
+  "lotteon.com",
+  "gmarket.co.kr",
+  "11st.co.kr",
+  "auction.co.kr",
+  "oliveyoung.co.kr",
+  "wconcept.co.kr",
+  "kream.co.kr",
+];
 
 const SEARCH_URL = "https://dapi.kakao.com/v2/search/image";
 /** 카카오 검색 API 응답을 기다리는 최대 시간 */
-const SEARCH_TIMEOUT_MS = 3000;
-/** 고른 원본 이미지가 실제로 열리는지 확인하는 최대 시간 (넘으면 카카오 썸네일을 쓴다) */
-const PROBE_TIMEOUT_MS = 1500;
+const SEARCH_TIMEOUT_MS = 2500;
+/** 사진 한 장을 내려받는 최대 시간 (원본 실패 시 썸네일까지 두 번) */
+const DOWNLOAD_TIMEOUT_MS = 2000;
+const MAX_REDIRECTS = 3;
+
+/** 이미지 서버가 봇 요청으로 보고 막지 않도록 실제 크롬 브라우저처럼 요청한다 */
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 const ratioOf = (d: KakaoImageDoc) => (d.width && d.height && d.width > 0 && d.height > 0 ? d.width / d.height : undefined);
 
@@ -39,26 +64,28 @@ function httpsUrl(raw: string | undefined) {
   }
 }
 
-const isMallCdn = (url: string) => {
+const hostOf = (url: string | undefined) => {
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    return MALL_CDN.some((k) => host.includes(k));
+    return url ? new URL(url).hostname.toLowerCase() : "";
   } catch {
-    return false;
+    return "";
   }
 };
+const matchesHost = (host: string, list: readonly string[]) => !!host && list.some((h) => host === h || host.endsWith(`.${h}`));
+
+export const isHotlinkBlocked = (url: string | undefined) => matchesHost(hostOf(httpsUrl(url)), HOTLINK_BLOCKED_HOSTS);
+export const isOfficialCdn = (url: string | undefined) => matchesHost(hostOf(httpsUrl(url)), OFFICIAL_CDN_HOSTS);
 
 /**
- * 검색 결과 중 대표 사진 하나를 고른다.
- * 1순위: 쇼핑몰 CDN 이미지이면서 정사각형에 가까운 것 (가로/세로 0.7~1.4)
+ * 검색 결과 중 대표 사진 하나를 고른다. 네이버 블로그·카페 이미지(핫링크 차단)는 처음부터 뺀다.
+ * 1순위: 쇼핑몰 공식 상품 사진 CDN이면서 정사각형에 가까운 것 (가로/세로 0.7~1.4)
  * 2순위: 배너·아이콘처럼 너무 길쭉한 것(2.0 초과 또는 0.5 미만)을 뺀 첫 번째 이미지
  */
 export function pickKakaoImage(docs: readonly KakaoImageDoc[] | undefined): KakaoImageDoc | undefined {
-  const valid = (docs ?? []).filter((d) => httpsUrl(d.image_url) || httpsUrl(d.thumbnail_url));
+  const valid = (docs ?? []).filter((d) => (httpsUrl(d.image_url) || httpsUrl(d.thumbnail_url)) && !isHotlinkBlocked(d.image_url));
   const first = valid.find((d) => {
     const r = ratioOf(d);
-    const url = httpsUrl(d.image_url);
-    return !!url && isMallCdn(url) && r !== undefined && r >= 0.7 && r <= 1.4;
+    return isOfficialCdn(d.image_url) && r !== undefined && r >= 0.7 && r <= 1.4;
   });
   if (first) return first;
   return valid.find((d) => {
@@ -70,43 +97,109 @@ export function pickKakaoImage(docs: readonly KakaoImageDoc[] | undefined): Kaka
 /** 검색어: 상품명 + ' 상품' (너무 긴 상품명은 앞부분만) */
 export const kakaoImageQuery = (title: string) => `${title.replace(/\s+/g, " ").trim().slice(0, 60)} 상품`;
 
-/** 원본 이미지가 핫링크 차단·삭제 없이 실제 이미지로 열리는지 확인한다 (본문은 받지 않고 바로 끊음) */
-async function isReachableImage(url: string, fetchImpl: typeof fetch) {
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return false;
+/** 본문을 maxBytes까지만 읽는다. 넘으면 null (큰 파일을 끝까지 받지 않음) */
+async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array | null> {
+  const declared = Number(res.headers.get("content-length") ?? 0);
+  if (declared > maxBytes) return null;
+  if (!res.body) {
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return buf.byteLength > maxBytes ? null : buf;
   }
-  if (!isPublicHttpUrl(u)) return false;
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength;
+  }
+  return out;
+}
+
+export type DownloadedImage = { bytes: Uint8Array; type: ImageType; source: "original" | "thumbnail" };
+
+/**
+ * 사진을 서버에서 직접 받는다 (브라우저 User-Agent + 원문 페이지 Referer).
+ * 리다이렉트마다 사설망 주소를 다시 막고, 저장 가능한 크기(MAX_IMAGE_BYTES)·형식(JPEG·PNG·WebP)인지 내용으로 확인한다.
+ */
+export async function downloadImage(url: string, referer: string | undefined, fetchImpl: typeof fetch = fetch): Promise<{ bytes: Uint8Array; type: ImageType } | undefined> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
   try {
-    // 화면의 <img referrerPolicy="no-referrer">와 같은 조건(리퍼러 없음)으로 확인
-    const res = await fetchImpl(u, { signal: controller.signal, redirect: "follow", cache: "no-store" });
-    const ok = res.ok && /^image\//i.test(res.headers.get("content-type") ?? "");
-    controller.abort();
-    return ok;
+    let target = new URL(url);
+    for (let i = 0; i <= MAX_REDIRECTS; i++) {
+      if (!isPublicHttpUrl(target)) return undefined;
+      const res = await fetchImpl(target, {
+        redirect: "manual",
+        signal: controller.signal,
+        cache: "no-store",
+        headers: {
+          "User-Agent": BROWSER_UA,
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+          ...(referer ? { Referer: referer } : {}),
+        },
+      });
+      const location = res.headers.get("location");
+      if (res.status >= 300 && res.status < 400 && location) {
+        target = new URL(location, target);
+        continue;
+      }
+      if (!res.ok) return undefined;
+      const bytes = await readCapped(res, MAX_IMAGE_BYTES);
+      const type = bytes && sniffImageType(bytes);
+      return bytes && type ? { bytes, type } : undefined;
+    }
+    return undefined;
   } catch {
-    return false;
+    return undefined;
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** 고른 결과에서 화면에 쓸 주소: 원본(image_url)이 열리면 원본, 아니면 카카오 썸네일(thumbnail_url) */
-export async function resolveKakaoImageUrl(doc: KakaoImageDoc, fetchImpl: typeof fetch = fetch) {
+/** Referer로 보낼 주소: 카카오가 알려준 원문 페이지, 없으면 이미지 서버 자신 */
+function refererFor(doc: KakaoImageDoc, imageUrl: string) {
+  const page = httpsUrl(doc.doc_url);
+  if (page) return page;
+  try {
+    return `${new URL(imageUrl).origin}/`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 고른 결과를 내려받는다: 원본(image_url) → 안 되면(차단·너무 큼·GIF 등) 카카오 썸네일(thumbnail_url) */
+export async function downloadKakaoImage(doc: KakaoImageDoc, fetchImpl: typeof fetch = fetch): Promise<DownloadedImage | undefined> {
   const original = httpsUrl(doc.image_url);
+  if (original) {
+    const img = await downloadImage(original, refererFor(doc, original), fetchImpl);
+    if (img) return { ...img, source: "original" };
+  }
   const thumbnail = httpsUrl(doc.thumbnail_url);
-  if (original && (await isReachableImage(original, fetchImpl))) return original;
-  return thumbnail;
+  if (thumbnail) {
+    const img = await downloadImage(thumbnail, undefined, fetchImpl);
+    if (img) return { ...img, source: "thumbnail" };
+  }
+  return undefined;
 }
 
 /**
- * 상품명으로 카카오 이미지 검색 → 대표 사진 주소.
- * 키가 없거나, 결과가 없거나, 호출이 실패하면 undefined.
+ * 상품명으로 카카오 이미지 검색 → 고른 사진을 내려받은 결과.
+ * 키가 없거나, 결과가 없거나, 호출·다운로드가 실패하면 undefined.
  */
-export async function searchProductImage(title: string, opts: { apiKey?: string; fetchImpl?: typeof fetch; signal?: AbortSignal } = {}): Promise<string | undefined> {
+export async function findProductImage(title: string, opts: { apiKey?: string; fetchImpl?: typeof fetch; signal?: AbortSignal } = {}): Promise<DownloadedImage | undefined> {
   const apiKey = opts.apiKey ?? process.env.KAKAO_REST_API_KEY;
   const fetchImpl = opts.fetchImpl ?? fetch;
   const name = title?.trim();
@@ -116,6 +209,7 @@ export async function searchProductImage(title: string, opts: { apiKey?: string;
   const abort = () => controller.abort();
   opts.signal?.addEventListener("abort", abort);
   const timer = setTimeout(abort, SEARCH_TIMEOUT_MS);
+  let doc: KakaoImageDoc | undefined;
   try {
     const res = await fetchImpl(`${SEARCH_URL}?query=${encodeURIComponent(kakaoImageQuery(name))}&size=10&sort=accuracy`, {
       headers: { Authorization: `KakaoAK ${apiKey}` },
@@ -124,13 +218,12 @@ export async function searchProductImage(title: string, opts: { apiKey?: string;
     });
     if (!res.ok) return undefined;
     const body = (await res.json()) as { documents?: KakaoImageDoc[] };
-    clearTimeout(timer);
-    const doc = pickKakaoImage(Array.isArray(body?.documents) ? body.documents : undefined);
-    return doc ? await resolveKakaoImageUrl(doc, fetchImpl) : undefined;
+    doc = pickKakaoImage(Array.isArray(body?.documents) ? body.documents : undefined);
   } catch {
     return undefined;
   } finally {
     clearTimeout(timer);
     opts.signal?.removeEventListener("abort", abort);
   }
+  return doc ? downloadKakaoImage(doc, fetchImpl) : undefined;
 }

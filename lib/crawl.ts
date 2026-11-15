@@ -1,5 +1,6 @@
 import { toOptionItems, toProductOptions } from "./options";
 import { parseShareText } from "./shareText";
+import { linkOrigin } from "./site";
 import type { Product } from "./types";
 
 /** 링크 등록을 지원하는 쇼핑몰 (도메인 → 표시 이름) */
@@ -135,8 +136,8 @@ export type CrawlResult = (
   searchedImageUrl?: string;
 };
 
-/** 상품명 이미지 검색(/api/image-search)을 기다리는 최대 시간 (서버 검색 3초 + 원본 확인 1.5초 + 여유) */
-const IMAGE_SEARCH_TIMEOUT_MS = 5500;
+/** 상품명 이미지 검색(/api/image-search)을 기다리는 최대 시간 (검색 2.5초 + 내려받기 최대 4초 + 저장·여유) */
+const IMAGE_SEARCH_TIMEOUT_MS = 9000;
 
 /**
  * 크롤링이 막혀 대표 사진이 없을 때 상품명으로 찾은 사진 주소. 실패·키 없음·결과 없음은 모두 undefined
@@ -152,7 +153,9 @@ export async function searchImageByName(name: string, signal?: AbortSignal): Pro
   try {
     const res = await fetch(`/api/image-search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
     const body = (await res.json()) as { imageUrl?: unknown };
-    return typeof body?.imageUrl === "string" && /^https:\/\//.test(body.imageUrl) ? body.imageUrl : undefined;
+    // 서버가 우리 저장소에 넣은 사진(/api/image/<id>)만 받는다. 공유 링크·다른 기기에서도 열리게 절대 주소로 바꾼다
+    const path = body?.imageUrl;
+    return typeof path === "string" && /^\/api\/image\/[A-Za-z0-9]+$/.test(path) ? new URL(path, linkOrigin()).toString() : undefined;
   } catch {
     return undefined;
   } finally {

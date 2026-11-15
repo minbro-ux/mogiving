@@ -1,10 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getGlobalRateLimiter } from "@/lib/globalRateLimit";
-import { searchProductImage } from "@/lib/kakaoImage";
+import { saveImage } from "@/lib/imageStore";
+import { findProductImage } from "@/lib/kakaoImage";
 import { clientIp, createRateLimiter } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** 카카오 검색(2.5초) + 사진 내려받기(원본·썸네일 각 2초) + 호출 제한·저장 여유 */
+export const maxDuration = 20;
 
 /** 상품명이 이보다 길면 검색어로 쓰지 않는다 (남용 방지) */
 const MAX_QUERY = 120;
@@ -34,8 +37,9 @@ export type ImageSearchResponse = { imageUrl?: string };
 const empty = (status = 200) => NextResponse.json<ImageSearchResponse>({}, { status, headers: { "Cache-Control": "no-store" } });
 
 /**
- * GET /api/image-search?q=상품명 → { imageUrl? }
+ * GET /api/image-search?q=상품명 → { imageUrl?: "/api/image/<id>" }
  * 크롤링이 막혀 대표 사진이 없을 때 카카오 이미지 검색으로 보완한다.
+ * 찾은 사진은 서버가 직접 받아 우리 저장소에 넣고 그 주소를 돌려준다 (외부 이미지 서버의 핫링크 차단으로 깨지지 않게).
  * KAKAO_REST_API_KEY가 없거나, 호출 제한에 걸리거나, 실패하면 빈 응답 → 화면은 쇼핑몰 기본 썸네일 카드 그대로.
  */
 export async function GET(req: NextRequest) {
@@ -45,8 +49,18 @@ export async function GET(req: NextRequest) {
   if (perIp(clientIp(req.headers)) || overall("all")) return empty(429);
   // 전체 상한은 메모리 제한을 통과한 요청만 센다. Supabase를 못 쓰면("unknown") 막지 않고 메모리 제한만 적용된다
   if ((await getGlobalRateLimiter()("kakao-image-search", DAY_SECONDS, dailyLimit())) === "limited") return empty(429);
-  const imageUrl = await searchProductImage(q, { signal: req.signal });
-  if (!imageUrl) return empty();
-  // 같은 상품명은 하루 동안 CDN 캐시를 써 카카오 API 호출을 아낀다 (캐시 응답은 이 함수를 거치지 않아 제한에도 세지 않음)
+  const image = await findProductImage(q, { signal: req.signal });
+  if (!image) return empty();
+  let imageUrl: string;
+  try {
+    const saved = await saveImage(image.bytes);
+    if (!saved.ok) return empty();
+    imageUrl = `/api/image/${saved.id}`;
+  } catch (e) {
+    // 저장소 오류: 외부 주소를 그대로 넘기면 다시 핫링크로 깨질 수 있어 기본 썸네일로 둔다
+    console.error("[api/image-search] 사진 저장 실패", e instanceof Error ? e.message : String(e));
+    return empty();
+  }
+  // 같은 상품명은 하루 동안 CDN 캐시를 써 카카오 API 호출·저장을 아낀다 (캐시 응답은 이 함수를 거치지 않아 제한에도 세지 않음)
   return NextResponse.json<ImageSearchResponse>({ imageUrl }, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800" } });
 }
