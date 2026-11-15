@@ -131,7 +131,35 @@ export type CrawlResult = (
 ) & {
   /** og:description (미리보기 카드 보조 문구) */
   description?: string;
+  /** 쇼핑몰에서 사진을 못 가져와 상품명 이미지 검색으로 채운 사진 (실제 상품과 다를 수 있어 안내용) */
+  searchedImageUrl?: string;
 };
+
+/** 상품명 이미지 검색(/api/image-search)을 기다리는 최대 시간 (서버 검색 3초 + 원본 확인 1.5초 + 여유) */
+const IMAGE_SEARCH_TIMEOUT_MS = 5500;
+
+/**
+ * 크롤링이 막혀 대표 사진이 없을 때 상품명으로 찾은 사진 주소. 실패·키 없음·결과 없음은 모두 undefined
+ * (화면은 쇼핑몰 기본 썸네일 카드 그대로)
+ */
+export async function searchImageByName(name: string, signal?: AbortSignal): Promise<string | undefined> {
+  const q = name.trim();
+  if (!q) return undefined;
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  signal?.addEventListener("abort", cancel);
+  const timer = setTimeout(cancel, IMAGE_SEARCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`/api/image-search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+    const body = (await res.json()) as { imageUrl?: unknown };
+    return typeof body?.imageUrl === "string" && /^https:\/\//.test(body.imageUrl) ? body.imageUrl : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+  }
+}
 
 /**
  * 링크에서 상품 정보를 가져온다. 어떤 실패도 throw하지 않고 수동 입력 모드용 결과로 바꾼다.
@@ -176,5 +204,13 @@ export async function crawlProduct({ url, mall, seed }: ParsedLink, signal?: Abo
   // 쿠팡처럼 크롤링이 막혀도 붙여넣은 글에 상품명·가격이 다 있었으면 그대로 진행한다 (사진은 직접 고르면 된다)
   if (error && seed?.name && seed.price) error = null;
   const description = meta.description?.trim() || undefined;
-  return error ? { ok: false, product, error, description } : { ok: true, product, description };
+
+  // 쿠팡처럼 사진을 못 가져왔어도 상품명(크롤링 또는 붙여넣은 글)이 있으면 이미지 검색으로 사진을 채운다
+  let searchedImageUrl: string | undefined;
+  if (!product.imageUrl && product.name && !signal?.aborted) {
+    searchedImageUrl = await searchImageByName(product.name, signal);
+    if (searchedImageUrl) product.imageUrl = searchedImageUrl;
+  }
+  const extra = { description, ...(searchedImageUrl ? { searchedImageUrl } : {}) };
+  return error ? { ok: false, product, error, ...extra } : { ok: true, product, ...extra };
 }

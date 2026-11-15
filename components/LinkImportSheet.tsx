@@ -158,6 +158,8 @@ export function LinkImportSheet({
   const parsedUrl = parseLink(url);
   const valid = !!ownerName.trim() && draft.name.trim().length > 1 && draft.price >= 1000 && !!parsedUrl && optionReady(option, draft.options, true) && shippingStatus(shipping) !== "partial";
   const set = (patch: Partial<Product>) => setDraft({ ...draft, ...patch });
+  // 상품명 이미지 검색으로 채운 사진을 아직 그대로 쓰는 중인지 (바꾸면 안내를 숨긴다)
+  const searched = !!result.searchedImageUrl && draft.imageUrl === result.searchedImageUrl;
 
   const create = () => {
     if (!parsedUrl) return;
@@ -179,7 +181,7 @@ export function LinkImportSheet({
     >
       {result.ok ? (
         <>
-          <ImagePicker product={draft} onChange={set} notice={pasteNotice} onNotice={setPasteNotice} />
+          <ImagePicker product={draft} onChange={set} notice={pasteNotice} onNotice={setPasteNotice} searched={searched} />
           <div className="mt-4 flex items-center gap-2">
             <Badge tone="green">자동 입력됨</Badge>
             <a href={result.product.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-1 text-[13px] text-grey-500">
@@ -193,7 +195,7 @@ export function LinkImportSheet({
         </>
       ) : (
         <>
-          <CrawlFailNotice code={result.error.code} onRetry={() => setTarget(parsedUrl ?? { ...link })} />
+          <CrawlFailNotice code={result.error.code} searched={searched} onRetry={() => setTarget(parsedUrl ?? { ...link })} />
           <CaptureUploadButton uploaded={!!draft.imageUrl?.startsWith("data:")} onUpload={(imageUrl) => set({ imageUrl })} notice={pasteNotice} onNotice={setPasteNotice} />
 
           <FormField label="상품 링크" hint={parsedUrl && <span className="text-[12px] text-grey-500">{parsedUrl.mall ?? "기타 쇼핑몰"}</span>}>
@@ -215,7 +217,7 @@ export function LinkImportSheet({
             <FeeSummary basePrice={draft.price} />
           </FormField>
           <FormField label="대표 사진">
-            <ImagePicker product={draft} onChange={set} className="!mt-0" onNotice={setPasteNotice} />
+            <ImagePicker product={draft} onChange={set} className="!mt-0" onNotice={setPasteNotice} searched={searched} />
           </FormField>
         </>
       )}
@@ -232,7 +234,7 @@ export function LinkImportSheet({
 
 /* ------------------------------ 크롤링 실패 안내 ------------------------------ */
 
-function CrawlFailNotice({ code, onRetry }: { code: CrawlErrorCode; onRetry: () => void }) {
+function CrawlFailNotice({ code, searched, onRetry }: { code: CrawlErrorCode; searched: boolean; onRetry: () => void }) {
   // 차단·무응답은 대부분 쇼핑몰 보안 정책(봇 차단) 때문. 상태 코드 같은 기술적인 내용은 보여주지 않는다
   const security = code === "blocked" || code === "timeout";
   return (
@@ -242,7 +244,9 @@ function CrawlFailNotice({ code, onRetry }: { code: CrawlErrorCode; onRetry: () 
         {security ? "쇼핑몰 보안으로 사진을 자동으로 불러오지 못했어요" : "상품 정보를 자동으로 불러오지 못했어요"}
       </p>
       <p className="mt-1.5 pl-[26px] text-[14px] leading-relaxed text-grey-700">
-        상품 화면의 대표 사진을 캡처해서 아래 버튼으로 올리거나, 이 화면에서 바로 붙여넣어 주세요! 사진이 없으면 쇼핑몰 기본 이미지로 열려요.
+        {searched
+          ? "상품명으로 비슷한 사진을 찾아 넣어 두었어요. 실제 상품과 다르면 대표 사진을 캡처해서 아래 버튼으로 올리거나, 이 화면에서 바로 붙여넣어 주세요!"
+          : "상품 화면의 대표 사진을 캡처해서 아래 버튼으로 올리거나, 이 화면에서 바로 붙여넣어 주세요! 사진이 없으면 쇼핑몰 기본 이미지로 열려요."}
       </p>
       <button onClick={onRetry} className="mt-2 flex items-center gap-1 pl-[26px] text-[13px] font-semibold text-grey-500">
         <RotateCw size={13} /> 다시 불러오기
@@ -379,6 +383,7 @@ function ImagePicker({
   className = "",
   notice = null,
   onNotice,
+  searched = false,
 }: {
   product: Product;
   onChange: (p: Partial<Product>) => void;
@@ -387,6 +392,8 @@ function ImagePicker({
   /** 붙여넣기 결과 안내 */
   notice?: PasteNotice;
   onNotice: (n: PasteNotice) => void;
+  /** 지금 사진이 상품명 이미지 검색으로 찾은 사진인지 */
+  searched?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
@@ -489,6 +496,7 @@ function ImagePicker({
           <Camera size={15} /> 사진 업로드
         </button>
       </div>
+      {searched && <p className="mt-2 text-[13px] leading-relaxed text-grey-500">상품명으로 찾은 사진이에요. 실제 상품과 다르면 사진을 올리거나 붙여넣어 바꿔주세요.</p>}
       <PasteHint pasteKey={pasteKey} />
       {error && <p className="mt-2 text-[13px] text-toss-red">{error}</p>}
       <NoticeLine notice={notice} />
