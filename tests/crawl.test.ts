@@ -1,21 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { type CrawlResponse, crawlProduct, parseLinkInput } from "@/lib/crawl";
+import { fetchProductName, linkProduct, parseLinkInput } from "@/lib/crawl";
+import { extractTitle } from "@/lib/productTitle";
 
-/** /api/crawl 응답을 흉내 낸다 (실제 서버·쇼핑몰에 요청하지 않음) */
 const realFetch = globalThis.fetch;
-function mockCrawl(body: CrawlResponse) {
-  globalThis.fetch = (async () => ({ json: async () => body })) as unknown as typeof fetch;
-}
 afterEach(() => {
   globalThis.fetch = realFetch;
 });
-
-const BLOCKED: CrawlResponse = { ok: false, code: "blocked", status: 403 };
-const CRAWLED: CrawlResponse = {
-  ok: true,
-  meta: { name: "크롤링된 다른 이름", price: 1, imageUrl: "https://img.example.com/a.jpg", options: ["미드나이트", { label: "블루", soldOut: true }] },
-};
 
 const COUPANG = "쿠팡에서 추천하는 상품입니다.\n[쿠팡] Apple 에어팟 맥스 2 USB-C\n849,000원\nhttps://link.coupang.com/a/bXyZ12";
 
@@ -51,39 +42,60 @@ describe("parseLinkInput", () => {
   });
 });
 
-describe("crawlProduct + 붙여넣은 글", () => {
-  it("크롤링이 막혀도 글에서 뽑은 상품명·가격·쇼핑몰·링크는 그대로, 개설 진행 가능", async () => {
-    mockCrawl(BLOCKED);
-    const r = await crawlProduct(parseLinkInput(COUPANG)!);
-    assert.equal(r.ok, true);
-    assert.equal(r.product.name, "Apple 에어팟 맥스 2 USB-C");
-    assert.equal(r.product.price, 849000);
-    assert.equal(r.product.mall, "쿠팡");
-    assert.equal(r.product.url, "https://link.coupang.com/a/bXyZ12");
-    assert.equal(r.product.imageUrl, undefined);
+describe("linkProduct: 입력 폼 초기값", () => {
+  it("공유 글의 상품명·가격·쇼핑몰만 채우고 사진은 비운다 (쇼핑몰 기본 이미지)", () => {
+    const p = linkProduct(parseLinkInput(COUPANG)!);
+    assert.equal(p.name, "Apple 에어팟 맥스 2 USB-C");
+    assert.equal(p.price, 849000);
+    assert.equal(p.mall, "쿠팡");
+    assert.equal(p.url, "https://link.coupang.com/a/bXyZ12");
+    assert.equal(p.imageUrl, undefined);
   });
 
-  it("크롤링이 성공하면 빈 칸(이미지·옵션)만 채우고 글의 값이 우선", async () => {
-    mockCrawl(CRAWLED);
-    const r = await crawlProduct(parseLinkInput(COUPANG)!);
-    assert.equal(r.ok, true);
-    assert.equal(r.product.name, "Apple 에어팟 맥스 2 USB-C");
-    assert.equal(r.product.price, 849000);
-    assert.equal(r.product.imageUrl, "https://img.example.com/a.jpg");
-    assert.deepEqual(r.product.options, ["미드나이트", { label: "블루", soldOut: true }]);
+  it("순수 URL은 상품명·가격이 빈 칸", () => {
+    const p = linkProduct(parseLinkInput("https://example.com/item/1")!);
+    assert.equal(p.name, "");
+    assert.equal(p.price, 0);
+    assert.equal(p.mall, "기타 쇼핑몰");
+  });
+});
+
+describe("fetchProductName: 실패는 모두 빈 문자열", () => {
+  const mock = (impl: () => Promise<unknown>) => {
+    globalThis.fetch = impl as unknown as typeof fetch;
+  };
+
+  it("서버가 찾은 상품명을 돌려준다", async () => {
+    mock(async () => ({ json: async () => ({ name: "  에어팟 맥스  " }) }));
+    assert.equal(await fetchProductName("https://example.com/a"), "에어팟 맥스");
   });
 
-  it("글에 가격이 없고 크롤링도 막히면 수동 입력으로 가되 상품명·쇼핑몰은 유지", async () => {
-    mockCrawl(BLOCKED);
-    const r = await crawlProduct(parseLinkInput("[네이버] 판도라 모먼트 팔찌 https://smartstore.naver.com/pandora/products/1")!);
-    assert.equal(r.ok, false);
-    assert.equal(r.product.name, "판도라 모먼트 팔찌");
-    assert.equal(r.product.mall, "네이버 스마트스토어");
+  it("빈 응답이면 빈 문자열", async () => {
+    mock(async () => ({ json: async () => ({}) }));
+    assert.equal(await fetchProductName("https://example.com/a"), "");
   });
 
-  it("순수 URL은 크롤링 값을 그대로 쓴다", async () => {
-    mockCrawl(CRAWLED);
-    const r = await crawlProduct(parseLinkInput("https://www.musinsa.com/products/2210934")!);
-    assert.equal(r.product.name, "크롤링된 다른 이름");
+  it("네트워크 오류도 throw하지 않고 빈 문자열", async () => {
+    mock(async () => {
+      throw new TypeError("failed");
+    });
+    assert.equal(await fetchProductName("https://example.com/a"), "");
+  });
+});
+
+describe("extractTitle: HTML → 상품명", () => {
+  it("og:title 우선, 끝의 사이트 이름은 걷어낸다", () => {
+    const html = `<head><title>무시</title><meta property="og:site_name" content="무신사"><meta property="og:title" content="나이키 에어포스 1 &amp; 07 | 무신사"></head>`;
+    assert.equal(extractTitle(html), "나이키 에어포스 1 & 07");
+  });
+
+  it("og:title이 없으면 <title>", () => {
+    assert.equal(extractTitle("<head><title> DJI 오즈모 포켓 4P </title></head>"), "DJI 오즈모 포켓 4P");
+  });
+
+  it("차단·에러 페이지 제목이나 숫자만 있는 제목은 버린다", () => {
+    assert.equal(extractTitle("<title>Access Denied</title>"), undefined);
+    assert.equal(extractTitle('<meta property="og:title" content="1234567">'), undefined);
+    assert.equal(extractTitle("<body>제목 없음</body>"), undefined);
   });
 });

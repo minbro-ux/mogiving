@@ -20,9 +20,6 @@ export function toOptionItems(options?: readonly unknown[]): OptionItem[] {
   return Array.from(byLabel.values());
 }
 
-/** 저장·전달용 형태: 구매 가능한 옵션은 문자열, 품절만 객체로 */
-export const toProductOptions = (items: OptionItem[]): ProductOption[] => items.map((o) => (o.soldOut ? { label: o.label, soldOut: true } : o.label));
-
 /** 처음 열 때 자동으로 고를 옵션: 품절이 아닌 첫 번째 옵션 (모두 품절이면 빈 값) */
 export const firstAvailableOption = (options?: readonly ProductOption[]) => toOptionItems(options).find((o) => !o.soldOut)?.label ?? "";
 

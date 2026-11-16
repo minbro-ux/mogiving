@@ -1,92 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { CrawlErrorCode, CrawlResponse, RawMeta } from "@/lib/crawl";
+import type { TitleResponse } from "@/lib/crawl";
+import { extractTitle } from "@/lib/productTitle";
 import { isPublicHttpUrl } from "@/lib/publicUrl";
-import { extractOptions } from "./options";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Microlink → 내부 파서 폴백까지 포함한 전체 제한 시간 (Vercel 함수 10초 제한 안쪽) */
-const DEADLINE_MS = 8000;
-/** Microlink 한 번에 기다리는 최대 시간. 넘기면 바로 내부 파서로 넘어간다 */
-const MICROLINK_TIMEOUT_MS = 4500;
-const MAX_REDIRECTS = 8;
-const MAX_BYTES = 3 * 1024 * 1024;
-/** 본문 이미지 중 이 크기(px) 이상으로 선언된 것을 '큰 이미지'로 본다 */
-const MIN_BODY_IMAGE_PX = 300;
+/** 리다이렉트·본문 읽기까지 포함한 전체 제한 시간. 넘기면 빈 응답 (사용자가 바로 직접 입력) */
+const DEADLINE_MS = 2500;
+const MAX_REDIRECTS = 5;
+/** og:title은 <head>에 있으므로 앞부분만 읽는다 */
+const MAX_BYTES = 512 * 1024;
 
-/** 실제 크롬 브라우저가 보내는 요청 헤더 (데스크톱 → 차단 시 모바일로 재시도) */
-const CHROME_HEADERS = {
-  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-  "Cache-Control": "no-cache",
-  Pragma: "no-cache",
-  "Upgrade-Insecure-Requests": "1",
-  "Sec-Fetch-Dest": "document",
-  "Sec-Fetch-Mode": "navigate",
-  "Sec-Fetch-Site": "none",
-  "Sec-Fetch-User": "?1",
-  "Sec-CH-UA": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+/** 카카오톡 링크 미리보기 봇: 대부분의 쇼핑몰이 공유 미리보기를 위해 OG 태그를 그대로 내어준다 */
+const HEADERS = {
+  Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+  "User-Agent": "kakaotalk-scrap/1.0; +https://devtalk.kakao.com/t/scrap/33984",
 };
-/** 카카오톡·페이스북 링크 미리보기 봇: 대부분의 쇼핑몰이 공유 미리보기를 위해 OG 태그를 그대로 내어준다 */
-const BOT_BASE = { Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8" };
-const BOTS = [
-  { ...BOT_BASE, "User-Agent": "kakaotalk-scrap/1.0; +https://devtalk.kakao.com/t/scrap/33984" },
-  { ...BOT_BASE, "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" },
-];
-const BROWSERS = [
-  {
-    ...CHROME_HEADERS,
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-    "Sec-CH-UA-Mobile": "?0",
-    "Sec-CH-UA-Platform": '"Windows"',
-  },
-  {
-    ...CHROME_HEADERS,
-    "User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
-    "Sec-CH-UA-Mobile": "?1",
-    "Sec-CH-UA-Platform": '"Android"',
-  },
-];
 
-/** 봇 차단·보안 정책으로 보는 응답 코드 (490: 네이버 비정상 접근 차단) */
-const BLOCKED_STATUS = [401, 403, 429, 490, 503];
-
-const fail = (code: CrawlErrorCode, status?: number) => NextResponse.json<CrawlResponse>({ ok: false, code, status });
-
-/**
- * 단축 URL·모바일 리다이렉트를 끝까지 따라가 최종 페이지를 받는다.
- * redirect: "follow"와 같은 결과지만, 매 단계 주소를 다시 검사하고 중간에 받은 쿠키를 이어 보낸다.
- */
-async function fetchPage(start: URL, headers: Record<string, string>, signal: AbortSignal) {
-  let url = start;
-  const cookies = new Map<string, string>();
-  for (let i = 0; i <= MAX_REDIRECTS; i++) {
-    if (!isPublicHttpUrl(url)) return null;
-    const cookie = Array.from(cookies, ([k, v]) => `${k}=${v}`).join("; ");
-    const res = await fetch(url, {
-      redirect: "manual",
-      signal,
-      headers: cookie ? { ...headers, Cookie: cookie } : headers,
-    });
-    for (const c of res.headers.getSetCookie?.() ?? []) {
-      const [pair] = c.split(";");
-      const eq = pair.indexOf("=");
-      if (eq > 0) cookies.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
-    }
-    const location = res.headers.get("location");
-    if (res.status >= 300 && res.status < 400 && location) {
-      url = new URL(location, url);
-      continue;
-    }
-    return { res, url };
-  }
-  return null;
-}
+const empty = () => NextResponse.json<TitleResponse>({}, { headers: { "Cache-Control": "no-store" } });
 
 /** Content-Type 또는 <meta charset>을 보고 EUC-KR 등도 올바르게 디코딩 */
-function decodeHtml(buf: ArrayBuffer, contentType: string | null) {
-  const head = new TextDecoder("latin1").decode(buf.slice(0, 4096));
+function decodeHtml(buf: Uint8Array, contentType: string | null) {
+  const head = new TextDecoder("latin1").decode(buf.subarray(0, 4096));
   const charset = (/charset=["']?([\w-]+)/i.exec(contentType ?? "") ?? /<meta[^>]+charset=["']?([\w-]+)/i.exec(head))?.[1] ?? "utf-8";
   try {
     return new TextDecoder(charset).decode(buf);
@@ -95,287 +32,67 @@ function decodeHtml(buf: ArrayBuffer, contentType: string | null) {
   }
 }
 
-const decodeEntities = (s: string) =>
-  s
-    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
+/** 본문을 MAX_BYTES까지만 읽고 끊는다 */
+async function readHead(res: Response) {
+  const reader = res.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < MAX_BYTES) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.byteLength;
+  }
+  reader.cancel().catch(() => {});
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out;
+}
 
-const attr = (tag: string, name: string) => {
-  const v = new RegExp(`\\s${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag)?.slice(2).find((x) => x !== undefined);
-  return v === undefined ? undefined : decodeEntities(v);
-};
-
-function parsePrice(v: unknown) {
-  if (typeof v === "number") return Math.round(v);
-  if (typeof v !== "string") return undefined;
-  const n = Number(v.replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined;
+/** 단축 URL·모바일 리다이렉트를 따라가되, 매 단계 주소가 공개 http(s)인지 다시 검사한다 */
+async function fetchPage(start: URL, signal: AbortSignal) {
+  let url = start;
+  for (let i = 0; i <= MAX_REDIRECTS; i++) {
+    if (!isPublicHttpUrl(url)) return null;
+    const res = await fetch(url, { redirect: "manual", signal, headers: HEADERS, cache: "no-store" });
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) {
+      url = new URL(location, url);
+      continue;
+    }
+    return res;
+  }
+  return null;
 }
 
 /**
- * 이미지 주소를 https 절대 URL로 바꾼다.
- * "//cdn…" → "https://cdn…", "/img/a.jpg" → "https://도메인/img/a.jpg", 상대 경로 → 페이지 기준
+ * GET /api/crawl?url=… → { name?: string }
+ * 상품명(og:title)만 가볍게 뽑는다. 차단·시간 초과·파싱 실패는 모두 빈 응답이라 화면은 조용히 빈 칸으로 둔다.
  */
-function toAbsoluteImageUrl(raw: string | undefined, base: URL) {
-  const src = raw?.trim();
-  if (!src || src.startsWith("data:") || src.startsWith("blob:")) return undefined;
-  try {
-    const u = new URL(src.startsWith("//") ? `https:${src}` : src, base);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
-    // 페이지가 https면 이미지도 https로 (혼합 콘텐츠 차단 방지)
-    if (u.protocol === "http:" && base.protocol === "https:" && u.hostname === base.hostname) u.protocol = "https:";
-    return u.toString();
-  } catch {
-    return undefined;
-  }
-}
-
-type LdNode = Record<string, unknown>;
-
-/** JSON-LD 안의 schema.org Product 노드 찾기 */
-function findLdProduct(html: string): LdNode | undefined {
-  const stack: unknown[] = [];
-  for (const m of Array.from(html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))) {
-    try {
-      stack.push(JSON.parse(m[1]));
-    } catch {
-      /* 깨진 JSON-LD는 무시 */
-    }
-  }
-  while (stack.length) {
-    const n = stack.pop();
-    if (Array.isArray(n)) stack.push(...n);
-    else if (n && typeof n === "object") {
-      const node = n as LdNode;
-      const type = node["@type"];
-      if (type === "Product" || (Array.isArray(type) && type.includes("Product"))) return node;
-      if (node["@graph"]) stack.push(node["@graph"]);
-    }
-  }
-  return undefined;
-}
-
-/** JSON-LD image: "url" | ["url", …] | { url } | [{ url }, …] */
-function ldImage(v: unknown): string | undefined {
-  if (typeof v === "string") return v;
-  if (Array.isArray(v)) return v.map(ldImage).find(Boolean);
-  if (v && typeof v === "object") {
-    const o = v as LdNode;
-    return ldImage(o.url ?? o.contentUrl);
-  }
-  return undefined;
-}
-
-/** 로고·아이콘·추적 픽셀 등 상품 사진이 아닐 가능성이 높은 이미지 */
-const NON_PRODUCT_IMAGE = /(logo|icon|sprite|blank|spacer|pixel|tracking|badge|banner|btn|button|loading|placeholder|avatar|profile|emoji|flag)/i;
-
-/** 상품 상세 본문에서 첫 번째 큰 이미지 (lazy-load 속성·srcset 포함) */
-function firstBodyImage(html: string, base: URL) {
-  const body = html.slice(Math.max(0, html.search(/<body[\s>]/i)));
-  let fallback: string | undefined;
-  for (const [tag] of Array.from(body.matchAll(/<img\s[^>]*>/gi))) {
-    const srcset = attr(tag, "data-srcset") ?? attr(tag, "srcset");
-    const raw = attr(tag, "data-src") ?? attr(tag, "data-original") ?? attr(tag, "data-lazy-src") ?? attr(tag, "data-lazy") ?? attr(tag, "src") ?? srcset?.split(",").pop()?.trim().split(/\s+/)[0];
-    const src = toAbsoluteImageUrl(raw, base);
-    if (!src || /\.(svg|gif)(\?|$)/i.test(src) || NON_PRODUCT_IMAGE.test(src) || NON_PRODUCT_IMAGE.test(attr(tag, "class") ?? "")) continue;
-    const w = Number(attr(tag, "width")) || 0;
-    const h = Number(attr(tag, "height")) || 0;
-    if (w >= MIN_BODY_IMAGE_PX || h >= MIN_BODY_IMAGE_PX) return src;
-    // 크기 선언이 없는 이미지는 큰 이미지를 못 찾았을 때만 사용 (작게 선언된 썸네일은 제외)
-    if (!w && !h && !fallback) fallback = src;
-  }
-  return fallback;
-}
-
-function extractMeta(html: string, pageUrl: URL): RawMeta {
-  const head = html.slice(0, Math.max(html.search(/<body[\s>]/i), 0) || html.length);
-  const baseHref = attr(/<base\s[^>]*>/i.exec(head)?.[0] ?? "", "href");
-  let base = pageUrl;
-  try {
-    if (baseHref) base = new URL(baseHref, pageUrl);
-  } catch {
-    /* 잘못된 <base>는 무시 */
-  }
-
-  const meta = new Map<string, string>();
-  for (const [tag] of Array.from(html.matchAll(/<meta\s[^>]*>/gi))) {
-    const key = (attr(tag, "property") ?? attr(tag, "name") ?? attr(tag, "itemprop"))?.toLowerCase();
-    const content = attr(tag, "content");
-    if (key && content && !meta.has(key)) meta.set(key, content);
-  }
-  const pick = (...keys: string[]) => keys.map((k) => meta.get(k)).find(Boolean);
-
-  const ld = findLdProduct(html);
-  const offers = (Array.isArray(ld?.offers) ? ld?.offers[0] : ld?.offers) as LdNode | undefined;
-  const ldBrand = ld?.brand;
-  const titleTag = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
-  const imageSrcLink = /<link\s[^>]*rel=["']?image_src["']?[^>]*>/i.exec(head)?.[0];
-
-  // 이미지 탐색 순서: OG(secure_url → 기본) → 트위터 카드 → JSON-LD Product.image → 기타 메타 → 본문 첫 번째 큰 이미지
-  const imageCandidates = [
-    pick("og:image:secure_url"),
-    pick("og:image", "og:image:url"),
-    pick("twitter:image", "twitter:image:src"),
-    ldImage(ld?.image),
-    pick("image", "thumbnail"),
-    imageSrcLink && attr(imageSrcLink, "href"),
-  ];
-  const imageUrl = imageCandidates.map((c) => toAbsoluteImageUrl(c, base)).find(Boolean) ?? firstBodyImage(html, base);
-
-  return {
-    name: pick("og:title", "twitter:title") ?? (typeof ld?.name === "string" ? decodeEntities(ld.name) : undefined) ?? (titleTag ? decodeEntities(titleTag) : undefined),
-    price:
-      parsePrice(pick("product:price:amount", "og:price:amount", "product:sale_price:amount", "price")) ??
-      parsePrice(offers?.price) ??
-      parsePrice(offers?.lowPrice) ??
-      // 카카오 선물하기 등은 가격을 og:description("… 20,000원")에만 넣는다
-      parsePrice(/(\d{1,3}(?:,\d{3})+)\s*원/.exec(pick("og:description", "description") ?? "")?.[1]),
-    imageUrl,
-    brand: pick("product:brand", "og:brand", "brand") ?? (typeof ldBrand === "string" ? ldBrand : typeof (ldBrand as LdNode)?.name === "string" ? ((ldBrand as LdNode).name as string) : undefined),
-    siteName: pick("og:site_name"),
-    description: pick("og:description", "twitter:description", "description") ?? (typeof ld?.description === "string" ? decodeEntities(ld.description) : undefined),
-    options: extractOptions(html, decodeEntities),
-  };
-}
-
-type Attempt = { ok: true; meta: RawMeta } | { ok: false; code: CrawlErrorCode; status?: number };
-
-async function crawl(target: URL, headers: Record<string, string>, signal: AbortSignal): Promise<Attempt> {
-  try {
-    const page = await fetchPage(target, headers, signal);
-    if (!page) return { ok: false, code: "network" };
-    const { res, url } = page;
-    if (BLOCKED_STATUS.includes(res.status)) return { ok: false, code: "blocked", status: res.status };
-    if (!res.ok) return { ok: false, code: "network", status: res.status };
-    if (!/html|xml/i.test(res.headers.get("content-type") ?? "text/html")) return { ok: false, code: "parse" };
-
-    const buf = await res.arrayBuffer();
-    const html = decodeHtml(buf.byteLength > MAX_BYTES ? buf.slice(0, MAX_BYTES) : buf, res.headers.get("content-type"));
-    // 최종 목적지(url) 기준으로 상대 경로 이미지를 절대 URL로 만든다
-    return { ok: true, meta: extractMeta(html, url) };
-  } catch (e) {
-    return { ok: false, code: signal.aborted ? "timeout" : "network" };
-  }
-}
-
-/** GET /api/crawl?url=… → 상품 메타데이터 (Microlink 우선, 실패 시 내부 OG/JSON-LD/본문 파서) */
 export async function GET(req: NextRequest) {
   let target: URL;
   try {
     target = new URL(req.nextUrl.searchParams.get("url") ?? "");
   } catch {
-    return fail("network");
+    return empty();
   }
-  if (!isPublicHttpUrl(target)) return fail("network");
+  if (!isPublicHttpUrl(target)) return empty();
 
-  // 하나의 AbortController로 전체 제한 시간을 묶는다: 시간이 지나면 진행 중인 요청·본문 읽기를 모두 끊고 실패로 응답
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DEADLINE_MS);
   try {
-    return NextResponse.json<CrawlResponse>(await crawlWithRetry(target, controller.signal));
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** 봇 차단·에러 페이지의 제목 (상품명으로 쓰면 안 됨) */
-const BLOCK_PAGE_TITLE = /access denied|attention required|just a moment|forbidden|captcha|robot|too many requests|^error|에러|오류|차단|비정상|보안\s*(검사|확인)|접근이?\s*(제한|거부)|페이지를 찾을 수 없/i;
-
-/** 차단 페이지에서 뽑힌 상품명·설명은 버린다 (이미지는 로고일 가능성이 높아 함께 버림) */
-function sanitize(meta: RawMeta): RawMeta {
-  if (meta.name && BLOCK_PAGE_TITLE.test(meta.name)) return { siteName: meta.siteName };
-  // 네이버처럼 렌더링 전 페이지에선 제목이 상품번호(숫자)나 URL만 남는 경우가 있다
-  if (meta.name && /^(\d+|https?:\/\/\S+)$/.test(meta.name.trim())) return { ...meta, name: undefined };
-  return meta;
-}
-
-type MicrolinkResponse = {
-  status?: string;
-  data?: { title?: string | null; description?: string | null; publisher?: string | null; url?: string | null; image?: { url?: string | null } | null };
-};
-
-/**
- * Microlink API로 메타데이터를 받는다. 자체 헤드리스 브라우저·IP로 접근해 네이버·쿠팡 429 봇 차단을 피한다.
- * MICROLINK_API_KEY가 있으면 유료(pro) 엔드포인트를 쓴다 (무료는 IP당 하루 50회).
- */
-async function fetchMicrolink(target: URL, signal: AbortSignal): Promise<Attempt> {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  signal.addEventListener("abort", abort);
-  const timer = setTimeout(abort, MICROLINK_TIMEOUT_MS);
-  try {
-    const key = process.env.MICROLINK_API_KEY;
-    const endpoint = key ? "https://pro.microlink.io" : "https://api.microlink.io";
-    const res = await fetch(`${endpoint}?url=${encodeURIComponent(target.toString())}`, {
-      signal: controller.signal,
-      headers: key ? { "x-api-key": key } : undefined,
-      cache: "no-store",
-    });
-    if (!res.ok) return { ok: false, code: res.status === 429 ? "blocked" : "network", status: res.status };
-    const body = (await res.json()) as MicrolinkResponse;
-    const d = body.data;
-    if (body.status !== "success" || !d) return { ok: false, code: "parse" };
-    let pageUrl = target;
-    try {
-      if (d.url) pageUrl = new URL(d.url);
-    } catch {
-      /* 잘못된 url은 무시 */
-    }
-    const description = d.description ? decodeEntities(d.description) : undefined;
-    const meta = sanitize({
-      name: d.title ? decodeEntities(d.title) : undefined,
-      imageUrl: toAbsoluteImageUrl(d.image?.url ?? undefined, pageUrl),
-      siteName: d.publisher ?? undefined,
-      description,
-      // Microlink는 가격을 따로 주지 않아 설명문 속 "…원"만 읽는다 (없으면 내부 파서가 채움)
-      price: parsePrice(/(\d{1,3}(?:,\d{3})+)\s*원/.exec(description ?? "")?.[1]),
-    });
-    if (!meta.name && !meta.imageUrl) return { ok: false, code: "parse" };
-    return { ok: true, meta };
+    const res = await fetchPage(target, controller.signal);
+    if (!res?.ok || !/html|xml/i.test(res.headers.get("content-type") ?? "text/html")) return empty();
+    const name = extractTitle(decodeHtml(await readHead(res), res.headers.get("content-type")));
+    return name ? NextResponse.json<TitleResponse>({ name }, { headers: { "Cache-Control": "no-store" } }) : empty();
   } catch {
-    return { ok: false, code: "timeout" };
+    return empty();
   } finally {
     clearTimeout(timer);
-    signal.removeEventListener("abort", abort);
   }
-}
-
-const META_KEYS = ["name", "price", "imageUrl", "brand", "siteName", "description", "options"] as const;
-const isComplete = (m: RawMeta) => !!(m.name && m.imageUrl && m.price);
-
-/** 앞선 시도의 값을 우선하고, 빈 칸만 뒤 시도의 값으로 채운다 */
-function merge(attempts: Attempt[]): Attempt {
-  const oks = attempts.filter((a): a is Extract<Attempt, { ok: true }> => a.ok);
-  if (!oks.length) return attempts.find((a) => !a.ok && a.code === "blocked") ?? attempts[attempts.length - 1];
-  const meta: RawMeta = {};
-  for (const k of META_KEYS) {
-    const v = oks.map((a) => a.meta[k]).find((x) => x !== undefined && x !== "" && !(Array.isArray(x) && !x.length));
-    if (v !== undefined) (meta as Record<string, unknown>)[k] = v;
-  }
-  return { ok: true, meta };
-}
-
-const crawlGroup = async (target: URL, group: Record<string, string>[], signal: AbortSignal): Promise<Attempt[]> =>
-  (await Promise.all(group.map((h) => crawl(target, h, signal)))).map((r) => (r.ok ? { ...r, meta: sanitize(r.meta) } : r));
-
-/**
- * 1) Microlink API (봇 차단 우회) + 카카오톡·페이스북 미리보기 봇 헤더로 직접 파싱 (동시에 시작)
- *    Microlink는 옵션 목록을 주지 않아, 원본 HTML의 옵션(select·JSON-LD)은 직접 파싱에서만 얻는다
- * 2) 그래도 상품명·이미지·가격 중 빈 값이 있으면 데스크톱·모바일 크롬 헤더로 폴백 (병렬)
- * 앞 단계에서 얻은 값을 우선하고, 빈 칸만 뒤 단계 값으로 채운다.
- */
-async function crawlWithRetry(target: URL, signal: AbortSignal): Promise<Attempt> {
-  const [microlink, bots] = await Promise.all([fetchMicrolink(target, signal), crawlGroup(target, BOTS, signal)]);
-  const attempts: Attempt[] = [microlink, ...bots];
-  const current = merge(attempts);
-  if (!signal.aborted && !(current.ok && isComplete(current.meta))) attempts.push(...(await crawlGroup(target, BROWSERS, signal)));
-  return merge(attempts);
 }
