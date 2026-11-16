@@ -16,7 +16,8 @@ export const PRODUCTS: Product[] = [
     mall: "THOME 공식몰",
     url: "https://thome.kr/product/%ED%86%B0-%EB%8D%94-%EA%B8%80%EB%A1%9C%EC%9A%B0-%EB%B2%A0%EC%9D%B4%EC%A7%81/137/category/94/display/1/",
     // 단품 (카페24 has_option = 'F', 옵션 선택 상자 없음)이라 options 없음
-    // 카페24 이미지 CDN(cafe24img.poxo.com)은 핫링크 정책이 바뀔 수 있어 공식 대표 이미지(700x877 PNG)를 JPEG로 저장해 사용
+    // 카페24 이미지 CDN(cafe24img.poxo.com)은 핫링크 정책이 바뀔 수 있어 공식 대표 이미지(700x877 PNG)를
+    // 카드(정사각형)를 꽉 채우도록 위 85px부터 700x700으로 잘라 JPEG로 저장해 사용
     imageUrl: "/images/thome-the-glow-basic.jpg",
   },
   {
