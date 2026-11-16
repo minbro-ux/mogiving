@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { fetchProductName, linkProduct, parseLinkInput } from "@/lib/crawl";
+import { fetchProductName, fetchProductOptions, linkProduct, parseLinkInput } from "@/lib/crawl";
 import { extractTitle } from "@/lib/productTitle";
 
 const realFetch = globalThis.fetch;
@@ -80,6 +80,51 @@ describe("fetchProductName: 실패는 모두 빈 문자열", () => {
       throw new TypeError("failed");
     });
     assert.equal(await fetchProductName("https://example.com/a"), "");
+  });
+});
+
+describe("fetchProductOptions: 실패·단품은 모두 빈 배열", () => {
+  const mock = (impl: (url: string) => Promise<unknown>) => {
+    globalThis.fetch = impl as unknown as typeof fetch;
+  };
+
+  it("서버가 찾은 옵션을 /api/crawl/options에서 받아 정리해 돌려준다 (품절은 객체, 중복·빈 이름 제거)", async () => {
+    let called = "";
+    mock(async (url) => {
+      called = url;
+      return { json: async () => ({ options: [" 블랙 ", "블랙", { label: "화이트", soldOut: true }, "", 3, { label: "네이비" }] }) };
+    });
+    assert.deepEqual(await fetchProductOptions("https://example.com/a?b=1"), ["블랙", { label: "화이트", soldOut: true }, "네이비"]);
+    assert.equal(called, "/api/crawl/options?url=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1");
+  });
+
+  it("옵션이 없는 단품(빈 응답)·이상한 응답은 빈 배열", async () => {
+    mock(async () => ({ json: async () => ({}) }));
+    assert.deepEqual(await fetchProductOptions("https://example.com/a"), []);
+    mock(async () => ({ json: async () => ({ options: "블랙" }) }));
+    assert.deepEqual(await fetchProductOptions("https://example.com/a"), []);
+  });
+
+  it("옵션이 너무 많으면(30개 초과) 칩 대신 직접 입력으로 둔다", async () => {
+    mock(async () => ({ json: async () => ({ options: Array.from({ length: 31 }, (_, i) => `옵션${i}`) }) }));
+    assert.deepEqual(await fetchProductOptions("https://example.com/a"), []);
+  });
+
+  it("네트워크 오류·JSON이 아닌 응답도 throw하지 않고 빈 배열", async () => {
+    mock(async () => {
+      throw new TypeError("failed");
+    });
+    assert.deepEqual(await fetchProductOptions("https://example.com/a"), []);
+    mock(async () => ({ json: async () => JSON.parse("<html>") }));
+    assert.deepEqual(await fetchProductOptions("https://example.com/a"), []);
+  });
+
+  it("호출한 쪽이 취소하면 기다리지 않고 빈 배열", async () => {
+    mock((_url, init?: { signal?: AbortSignal }) => new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("aborted")))) as never);
+    const c = new AbortController();
+    const p = fetchProductOptions("https://example.com/a", c.signal);
+    c.abort();
+    assert.deepEqual(await p, []);
   });
 });
 

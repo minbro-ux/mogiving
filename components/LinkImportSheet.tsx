@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Camera, Gift, Loader2, X } from "lucide-react";
-import { type ParsedLink, fetchProductName, linkProduct, parseLink } from "@/lib/crawl";
+import { type ParsedLink, fetchProductName, fetchProductOptions, linkProduct, parseLink } from "@/lib/crawl";
 import { FEE_PERCENT } from "@/lib/fee";
 import { clipboardImage, readImage } from "@/lib/image";
 import { createFunding } from "@/lib/mock";
 import type { Funding, Product } from "@/lib/types";
-import { EMPTY_SHIPPING, FeeSummary, FormField, OptionField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, PurposeFields, optionReady, SafetyNote, ShippingFields, inputClass, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
+import { EMPTY_SHIPPING, FeeSummary, FormField, OptionSuggestField, OwnerNameField, PeriodPicker, PriceAccuracyNotice, PriceInput, PurposeFields, optionReady, SafetyNote, ShippingFields, inputClass, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
 import { BottomSheet, Button, ProductThumb } from "./ui";
 
-/** 링크 칸을 고친 뒤 상품명을 다시 불러오기까지 기다리는 시간 */
+/** 링크 칸을 고친 뒤 상품명·옵션을 다시 불러오기까지 기다리는 시간 */
 const NAME_FETCH_DELAY_MS = 400;
 
 type Notice = { ok: boolean; text: string } | null;
@@ -50,6 +50,7 @@ function usePasteImage(onImage: (imageUrl: string) => void, onNotice: (n: Notice
  * 링크 → 상품 정보 입력 바텀시트. 기다림 없이 바로 열리고, 입력 순서는
  * ① 상품 링크 ② 상품명(링크에서 자동으로 채움) ③ 선물 금액 ④ 대표 사진(캡처 업로드·붙여넣기).
  * 상품명을 못 가져와도 경고 없이 빈 칸으로 두어 바로 입력할 수 있다.
+ * 옵션 목록은 백그라운드에서 따로 받아, 찾으면 옵션 입력칸 아래에 누르면 채워지는 칩으로 보여준다.
  * 새 링크마다 입력값을 새로 시작하도록 부모가 key를 링크별로 바꿔 렌더한다.
  */
 export function LinkImportSheet({
@@ -81,7 +82,8 @@ export function LinkImportSheet({
 
   usePasteImage((imageUrl) => setDraft((d) => (d ? { ...d, imageUrl } : d)), setNotice);
 
-  // 링크가 바뀌면 상품명만 가볍게 불러와 빈 칸을 채운다 (처음 열 때는 바로, 링크 칸을 고치면 입력이 멈춘 뒤)
+  // 링크가 바뀌면 상품명을 가볍게 불러와 빈 칸을 채우고, 옵션 목록도 따로 받아 칩으로 보여준다
+  // (처음 열 때는 바로, 링크 칸을 고치면 입력이 멈춘 뒤). 둘 다 실패하면 조용히 직접 입력으로 남는다
   const parsedUrl = parseLink(url);
   const targetUrl = parsedUrl?.url ?? "";
   useEffect(() => {
@@ -90,6 +92,12 @@ export function LinkImportSheet({
     const delay = firstFetch.current ? 0 : NAME_FETCH_DELAY_MS;
     firstFetch.current = false;
     const timer = setTimeout(() => {
+      // 이전 링크에서 찾은 옵션 칩은 새 링크와 맞지 않으므로 먼저 지운다 (입력해 둔 옵션 글자는 그대로)
+      setDraft((d) => (d?.options ? { ...d, options: undefined } : d));
+      fetchProductOptions(targetUrl, controller.signal).then((options) => {
+        if (controller.signal.aborted || !options.length) return;
+        setDraft((d) => (d ? { ...d, options } : d));
+      });
       setNameLoading(true);
       fetchProductName(targetUrl, controller.signal).then((name) => {
         if (controller.signal.aborted) return;
@@ -111,7 +119,7 @@ export function LinkImportSheet({
 
   if (!link || !draft) return null;
 
-  const valid = !!ownerName.trim() && draft.name.trim().length > 1 && draft.price >= 1000 && !!parsedUrl && optionReady(option, draft.options, true) && shippingStatus(shipping) !== "partial";
+  const valid = !!ownerName.trim() && draft.name.trim().length > 1 && draft.price >= 1000 && !!parsedUrl && (!option.trim() || optionReady(option, draft.options, true)) && shippingStatus(shipping) !== "partial";
   const set = (patch: Partial<Product>) => setDraft({ ...draft, ...patch });
   const mall = parsedUrl?.mall ?? draft.mall;
 
@@ -158,7 +166,7 @@ export function LinkImportSheet({
 
       <PurposeFields value={purpose} round={round} onChange={setPurpose} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />
-      <OptionField value={option} onChange={setOption} options={draft.options} allowCustom />
+      <OptionSuggestField value={option} onChange={setOption} options={draft.options} />
       <PeriodPicker value={days} onChange={setDays} />
       <ShippingFields value={shipping} onChange={setShipping} />
       <SafetyNote />

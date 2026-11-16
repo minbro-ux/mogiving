@@ -4,7 +4,8 @@
  * 외부 의존성이 없는 순수 함수라 단위 테스트로 바로 검증한다.
  */
 
-const decodeEntities = (s: string) =>
+/** HTML 엔티티를 풀고 공백을 하나로 모은다 (옵션 파서도 같이 쓴다) */
+export const decodeEntities = (s: string) =>
   s
     .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))

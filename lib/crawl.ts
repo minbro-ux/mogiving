@@ -1,5 +1,6 @@
+import { MAX_OPTIONS, toOptionItems, toProductOptions } from "./options";
 import { parseShareText } from "./shareText";
-import type { Product } from "./types";
+import type { Product, ProductOption } from "./types";
 
 /** 링크 등록을 지원하는 쇼핑몰 (도메인 → 표시 이름) */
 const MALLS: [RegExp, string][] = [
@@ -85,6 +86,37 @@ export async function fetchProductName(url: string, signal?: AbortSignal): Promi
     return typeof body?.name === "string" ? body.name.trim().slice(0, 60) : "";
   } catch {
     return "";
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+  }
+}
+
+/* ------------------------------- 옵션 목록 가져오기 ------------------------------- */
+
+/** /api/crawl/options 응답. 옵션이 없거나(단품) 못 찾으면 빈 객체 */
+export type OptionsResponse = { options?: ProductOption[] };
+
+/** 옵션 요청을 기다리는 최대 시간 (서버 자체 제한 4초 + 왕복 여유). 화면은 이 요청을 기다리지 않는다 */
+const OPTIONS_TIMEOUT_MS = 5000;
+
+/**
+ * 링크 상품의 옵션 목록(색상·사이즈 등)을 서버(/api/crawl/options)에서 받아 온다.
+ * 단품·차단·시간 초과·네트워크 오류는 모두 빈 배열 (화면은 경고 없이 직접 입력칸만 둔다).
+ * 서버 응답을 그대로 믿지 않고 { label, soldOut } 형태만, 길이·개수 제한을 걸어 쓴다
+ */
+export async function fetchProductOptions(url: string, signal?: AbortSignal): Promise<ProductOption[]> {
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  signal?.addEventListener("abort", cancel);
+  const timer = setTimeout(cancel, OPTIONS_TIMEOUT_MS);
+  try {
+    const res = await fetch(`/api/crawl/options?url=${encodeURIComponent(url)}`, { signal: controller.signal });
+    const body = (await res.json()) as OptionsResponse;
+    const items = toOptionItems(body?.options);
+    return items.length > MAX_OPTIONS ? [] : toProductOptions(items);
+  } catch {
+    return [];
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", cancel);

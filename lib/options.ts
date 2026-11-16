@@ -5,6 +5,9 @@ export type OptionItem = { label: string; soldOut: boolean };
 
 const MAX_LABEL = 40;
 
+/** 링크에서 가져온 옵션 칩 최대 개수 (너무 많으면 직접 입력이 낫다) */
+export const MAX_OPTIONS = 30;
+
 /** 문자열·객체가 섞인 옵션 목록을 하나의 형태로 정리한다. 같은 이름이 겹치면 구매 가능한 쪽을 남긴다 */
 export function toOptionItems(options?: readonly unknown[]): OptionItem[] {
   if (!Array.isArray(options)) return [];
@@ -19,6 +22,9 @@ export function toOptionItems(options?: readonly unknown[]): OptionItem[] {
   }
   return Array.from(byLabel.values());
 }
+
+/** 저장·전달용 형태: 구매 가능한 옵션은 문자열, 품절만 객체로 */
+export const toProductOptions = (items: OptionItem[]): ProductOption[] => items.map((o) => (o.soldOut ? { label: o.label, soldOut: true } : o.label));
 
 /** 처음 열 때 자동으로 고를 옵션: 품절이 아닌 첫 번째 옵션 (모두 품절이면 빈 값) */
 export const firstAvailableOption = (options?: readonly ProductOption[]) => toOptionItems(options).find((o) => !o.soldOut)?.label ?? "";

@@ -263,6 +263,47 @@ export function OptionField({ value, onChange, options, allowCustom = false }: {
   );
 }
 
+/**
+ * 링크 상품용 옵션 칸: 직접 입력칸은 늘 그대로 두고, 쇼핑몰에서 옵션을 찾았으면 그 아래에 칩을 보여준다.
+ * 칩을 누르면 입력칸이 그 옵션으로 채워진다(고른 뒤에도 글자를 고칠 수 있다). 품절 칩은 회색으로 보여주기만 한다.
+ * 옵션은 백그라운드에서 늦게 도착할 수 있으므로 입력값을 바꾸거나 필수로 만들지 않는다.
+ */
+export function OptionSuggestField({ value, onChange, options }: { value: string; onChange: (v: string) => void; options?: ProductOption[] }) {
+  const items = toOptionItems(options);
+  const soldOutPicked = items.some((o) => o.soldOut && o.label === value.trim());
+  return (
+    <FormField label="옵션 (색상 / 사이즈 / 용량 등)" hint={<span className="text-[12px] text-grey-400">선택</span>}>
+      <input value={value} maxLength={40} onChange={(e) => onChange(e.target.value)} placeholder="예) 스페이스 그레이 / 256GB" className={inputClass} />
+      {items.length > 0 && (
+        <div className="mt-2.5">
+          <p className="mb-1.5 text-[12px] text-grey-500">쇼핑몰에서 찾은 옵션이에요. 누르면 바로 입력돼요</p>
+          <div className="flex flex-wrap gap-2">
+            {items.map((o) =>
+              o.soldOut ? (
+                <button key={o.label} type="button" disabled aria-disabled aria-label={`${o.label} 품절`} className="min-h-9 cursor-not-allowed rounded-full bg-grey-50 px-3.5 py-1.5 text-[14px] font-medium text-grey-300">
+                  <span className="line-through">{o.label}</span>
+                  <span className="ml-1 text-[11px]">품절</span>
+                </button>
+              ) : (
+                <button
+                  key={o.label}
+                  type="button"
+                  aria-pressed={value.trim() === o.label}
+                  onClick={() => onChange(o.label)}
+                  className={`min-h-9 rounded-full px-3.5 py-1.5 text-[14px] font-semibold transition ${value.trim() === o.label ? "bg-toss-blue text-white" : "bg-grey-100 text-grey-600"}`}
+                >
+                  {o.label}
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      )}
+      {soldOutPicked && <p className="mt-2 text-[13px] text-toss-red">품절된 옵션이에요. 다른 옵션을 골라 주세요</p>}
+    </FormField>
+  );
+}
+
 export const EMPTY_SHIPPING: ShippingAddress = { name: "", phone: "", address: "", detail: "", memo: "" };
 
 /** 비어 있음 / 필수 항목(이름·연락처·주소) 모두 입력 / 일부만 입력 */
