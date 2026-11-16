@@ -5,6 +5,21 @@ import type { Funding, Participant, Product, ShippingAddress } from "./types";
 /** 운영자 추천 큐레이션 (구매처 링크 포함) */
 export const PRODUCTS: Product[] = [
   {
+    id: "p21",
+    brand: "THOME",
+    name: "톰 더 글로우 베이직",
+    // 공식몰 판매가 (product:price·product:sale_price 모두 999,000원, 상품 할인가 없음. 2026-11-16 확인)
+    price: 999000,
+    emoji: "✨",
+    bg: "#FFFFFF",
+    category: "뷰티/향수",
+    mall: "THOME 공식몰",
+    url: "https://thome.kr/product/%ED%86%B0-%EB%8D%94-%EA%B8%80%EB%A1%9C%EC%9A%B0-%EB%B2%A0%EC%9D%B4%EC%A7%81/137/category/94/display/1/",
+    // 단품 (카페24 has_option = 'F', 옵션 선택 상자 없음)이라 options 없음
+    // 카페24 이미지 CDN(cafe24img.poxo.com)은 핫링크 정책이 바뀔 수 있어 공식 대표 이미지(700x877 PNG)를 JPEG로 저장해 사용
+    imageUrl: "/images/thome-the-glow-basic.jpg",
+  },
+  {
     id: "p16",
     brand: "Apple",
     name: "Apple AirPods Pro 3 (MagSafe 충전 케이스 USB-C)",
