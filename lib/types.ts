@@ -52,33 +52,49 @@ export type ShippingAddress = {
 };
 
 /**
- * achieved: 목표 금액 100% 달성
- * topup:    미달 → 부족한 차액을 받는 사람이 직접 결제하고 원래 선물
+ * achieved: 목표 금액 100% 완성 (친구들의 선물 교환권으로 완성)
+ * topup:    기간 종료 후 남은 차액을 수령인이 직접 결제해 완성
  */
 export type GiftReason = "achieved" | "topup";
 
-/**
- * 펀딩 이후 정산 방식.
- * 현금 송금·포인트·교환권 없이, 원래 쇼핑몰 상품을 실물 배송하거나 전액 승인 취소만 한다.
- */
+/** 실물 선물 수령: 원래 쇼핑몰 상품을 실물로 배송한다 */
 export type FundingGift = {
   kind: "gift";
   product: Product;
   reason: GiftReason;
   address: ShippingAddress;
-  /** 친구들이 모아준 금액 */
+  /** 친구들이 선물 교환권으로 적립해 준 금액 */
   collected: number;
-  /** 수령자가 부족분으로 직접 결제한 금액 */
+  /** 수령인이 차액으로 직접 결제한 금액 */
   extraPaid?: number;
 };
 
-export type Resolution = FundingGift | { kind: "cancel"; amount: number; count: number };
+/** 모바일 상품권 전환 신청: 기간 내 미도달 선물의 적립 금액(원가 기준)을 모바일 상품권으로 받는다 */
+export type FundingVoucher = {
+  kind: "voucher";
+  /** 전환되는 원가 상당액 (적립 금액에서 플랫폼 수수료 제외). 수령인 화면에만 있다 */
+  amount?: number;
+  voucherType?: string;
+  requestedAt: number;
+};
+
+export type Resolution = FundingGift | FundingVoucher;
 
 /**
- * active:   모금 중 (목표 금액을 넘는 결제는 받지 않음)
- * achieved: 목표 100% 달성 → 즉시 마감, 수령자가 배송지 입력
- * under:    기간 만료로 마감됐지만 목표 미달 → 전액 취소 (처리하지 않으면 일정 기간 뒤 자동 환불)
- * done:     배송 접수 또는 취소 완료 (resolution 존재)
+ * 공동 선물 상태 (DB mogiving_shares.gift_status와 같은 이름)
+ * ACTIVE:            선물 적립 중 (목표 금액을 넘는 결제는 받지 않음)
+ * COMPLETED_FULL:    100% 완성 → 실물 발주 대기 (수령인이 배송지를 접수하면 발주)
+ * PENDING_CHOICE:    기간 종료·미도달 → 수령인의 수령 방식 선택 대기 (차액 결제 또는 모바일 상품권 전환). 결제는 취소되지 않는다
+ * CONVERTED_VOUCHER: 모바일 상품권 전환 신청 완료
+ */
+export type GiftStatus = "ACTIVE" | "COMPLETED_FULL" | "PENDING_CHOICE" | "CONVERTED_VOUCHER";
+
+/**
+ * 화면 단계
+ * active:   ACTIVE
+ * achieved: COMPLETED_FULL, 배송지 접수 전
+ * under:    PENDING_CHOICE (수령 방식 선택 대기)
+ * done:     배송 접수 또는 모바일 상품권 전환 신청 완료 (resolution 존재)
  */
 export type Phase = "active" | "achieved" | "under" | "done";
 
@@ -89,13 +105,13 @@ export type Funding = {
   title: string;
   ownerName: string;
   ownerMessage: string;
-  /** 선물 목적. 목적 선택 기능 이전에 만든 펀딩에는 없다 (생일로 간주) */
+  /** 선물 목적. 목적 선택 기능 이전에 만든 선물에는 없다 (생일로 간주) */
   purpose?: FundingPurpose;
   deadline: number;
   participants: Participant[];
   phase: Phase;
   resolution?: Resolution;
-  /** 몇 번째 모금함인지 (1차 완판 후 2탄, 3탄 …) */
+  /** 몇 번째 선물 위시인지 (1차 완성 후 2탄, 3탄 …) */
   round: number;
   /** 주최자가 등록한 선물 수령 배송지. 주최자 화면·서버에만 두고 공유 링크·친구 화면에는 절대 담지 않는다 */
   shipping?: ShippingAddress;

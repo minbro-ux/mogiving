@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
-import { goalWithFee } from "./fee";
+import { getContributionSummary } from "./contributionStore";
+import { FEE_PERCENT, goalWithFee, voucherAmount } from "./fee";
+import { isGiftStatus } from "./giftStatus";
 import { maxDeadline } from "./policy";
 import { type SharePayload, adminExtra, publicPayload } from "./share";
-import type { ShippingAddress } from "./types";
+import type { GiftStatus, ShippingAddress } from "./types";
 
 /** goal은 integer 컬럼 */
 const MAX_GOAL_COLUMN = 2_147_483_647;
@@ -42,7 +44,21 @@ interface ShareStore {
   /** 아직 접수되지 않았을 때만 배송지와 접수 시각을 저장한다 */
   requestDelivery(id: string, keyHash: string, shipping: ShippingAddress): Promise<void>;
   getDelivery(id: string): Promise<StoredDelivery | null>;
+  /** 기간이 끝난 미도달 선물을 모바일 상품권 전환 신청 상태(CONVERTED_VOUCHER)로 만든다 */
+  convertVoucher(id: string, request: VoucherRequestInput): Promise<ConvertVoucherResult>;
+  /** 운영 알림용: 운영자 전용 정보(x)가 담긴 payload와 수령인 배송지 */
+  getOps(id: string): Promise<{ payload: SharePayload; shipping: ShippingAddress | null } | null>;
+  /** 기간이 끝난 ACTIVE 미도달 선물을 PENDING_CHOICE로 바꾸고 바뀐 id를 돌려준다 */
+  markPendingChoice(nowMs: number, limit: number): Promise<string[]>;
 }
+
+/** 수령인이 입력하는 모바일 상품권 전환 정보 */
+export type VoucherRequestInput = { type: string; name: string; phone: string };
+/** 저장된 전환 신청. amount = 적립 금액에서 수수료를 뺀 원가 상당액 */
+export type VoucherRequest = VoucherRequestInput & { amount: number; collected: number; requestedAt: number };
+
+/** converted: 이번에 신청됨 · already: 이미 신청됨 · unavailable: 기간 종료 전이거나 완성·적립 0원 · not_found: 선물 없음 */
+export type ConvertVoucherResult = { result: "converted" | "already"; request: VoucherRequest } | { result: "unavailable" | "not_found" };
 
 export type StoredDelivery = { requestedAt: number; shipping: ShippingAddress | null };
 
@@ -55,6 +71,10 @@ export type AdminShareRow = {
   shipping: ShippingAddress | null;
   /** 주최자가 배송을 접수한 시각 (없으면 미접수) */
   deliveryRequestedAt: string | null;
+  /** 저장된 공동 선물 상태 (로컬 저장소에는 없음) */
+  giftStatus: GiftStatus | null;
+  /** 모바일 상품권 전환 신청 */
+  voucher: VoucherRequest | null;
 };
 
 /* ------------------------------ Supabase (배포용) ------------------------------ */
@@ -64,8 +84,10 @@ const TABLE = "mogiving_shares";
 function supabaseStore(url: string, serviceKey: string): ShareStore {
   const endpoint = `${url.replace(/\/$/, "")}/rest/v1/${TABLE}`;
   const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
-  // Next 서버 컴포넌트의 fetch 캐시를 끄고 항상 최신 달성률을 읽는다
+  // Next 서버 컴포넌트의 fetch 캐시를 끄고 항상 최신 완성도을 읽는다
   const call = (query: string, init: RequestInit) => fetch(`${endpoint}${query}`, { ...init, headers: { ...headers, ...init.headers }, cache: "no-store" });
+  const rpc = (fn: string, args: Record<string, unknown>) =>
+    fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/${fn}`, { method: "POST", headers, body: JSON.stringify(args), cache: "no-store" });
 
   return {
     async update(prev, payload, shipping) {
@@ -111,6 +133,8 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
         goal?: number | null;
         collected_amount?: number;
         delivery_requested_at?: string | null;
+        gift_status?: string;
+        voucher_request?: VoucherRequest | null;
       }[];
       return rows.map((r) => ({
         id: r.id,
@@ -123,6 +147,8 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
         createdAt: r.created_at,
         updatedAt: r.updated_at,
         deliveryRequestedAt: r.delivery_requested_at ?? null,
+        giftStatus: isGiftStatus(r.gift_status) ? r.gift_status : null,
+        voucher: r.voucher_request ?? null,
       }));
     },
     async requestDelivery(id, keyHash, shipping) {
@@ -135,18 +161,40 @@ function supabaseStore(url: string, serviceKey: string): ShareStore {
       if (!res.ok) throw new Error(`supabase requestDelivery ${res.status}`);
     },
     async getDelivery(id) {
-      // select=*: 접수 컬럼을 추가하는 마이그레이션 적용 전에도 펀딩 화면과 결제가 깨지지 않게
+      // select=*: 접수 컬럼을 추가하는 마이그레이션 적용 전에도 공동 선물 화면과 결제가 깨지지 않게
       const res = await call(`?id=eq.${encodeURIComponent(id)}&select=*`, { method: "GET" });
       if (!res.ok) throw new Error(`supabase getDelivery ${res.status}`);
       const r = ((await res.json()) as { shipping: ShippingAddress | null; delivery_requested_at?: string | null }[])[0];
       return r?.delivery_requested_at ? { requestedAt: Date.parse(r.delivery_requested_at), shipping: r.shipping } : null;
+    },
+    async convertVoucher(id, request) {
+      // 행 잠금 아래에서 상태 확인과 신청 기록을 함께 한다 (차액 결제와 엇갈리지 않음)
+      const res = await rpc("mogiving_convert_voucher", { p_share_id: id, p_fee_percent: FEE_PERCENT, p_request: request });
+      // 404 PGRST202: 함수 없음 → 마이그레이션(20261121000000_mogiving_gift_voucher_model.sql) 미적용
+      if (!res.ok) throw new Error(`supabase rpc mogiving_convert_voucher ${res.status}`);
+      const r = (await res.json()) as { result?: string; request?: VoucherRequest };
+      if ((r.result === "converted" || r.result === "already") && r.request) return { result: r.result, request: r.request };
+      if (r.result === "unavailable" || r.result === "not_found") return { result: r.result };
+      throw new Error(`supabase rpc mogiving_convert_voucher unexpected ${String(r.result).slice(0, 40)}`);
+    },
+    async getOps(id) {
+      const res = await call(`?id=eq.${encodeURIComponent(id)}&select=payload,shipping,goal,collected_amount`, { method: "GET" });
+      if (!res.ok) throw new Error(`supabase getOps ${res.status}`);
+      const r = ((await res.json()) as { payload: SharePayload; shipping: ShippingAddress | null; goal: number | null; collected_amount: number }[])[0];
+      if (!r) return null;
+      return { payload: r.payload.x ? { ...r.payload, x: { ...r.payload.x, g: r.goal ?? r.payload.x.g, a: r.collected_amount } } : r.payload, shipping: r.shipping };
+    },
+    async markPendingChoice(nowMs, limit) {
+      const res = await rpc("mogiving_mark_pending_choice", { p_now_ms: nowMs, p_limit: limit });
+      if (!res.ok) throw new Error(`supabase rpc mogiving_mark_pending_choice ${res.status}`);
+      return ((await res.json()) as { share_id: string }[]).map((r) => r.share_id);
     },
   };
 }
 
 /* ------------------------------ 로컬 파일 (개발용) ------------------------------ */
 
-type FileEntry = { keyHash: string; payload: SharePayload; shipping?: ShippingAddress; createdAt?: number; updatedAt: number; deliveryRequestedAt?: number };
+type FileEntry = { keyHash: string; payload: SharePayload; shipping?: ShippingAddress; createdAt?: number; updatedAt: number; deliveryRequestedAt?: number; voucher?: VoucherRequest };
 
 function fileStore(): ShareStore {
   const file = path.join(process.env.SHARE_STORE_DIR ?? path.join(process.cwd(), ".data"), "shares.json");
@@ -193,6 +241,8 @@ function fileStore(): ShareStore {
           createdAt: new Date(e.createdAt ?? e.updatedAt).toISOString(),
           updatedAt: new Date(e.updatedAt).toISOString(),
           deliveryRequestedAt: e.deliveryRequestedAt ? new Date(e.deliveryRequestedAt).toISOString() : null,
+          giftStatus: null,
+          voucher: e.voucher ?? null,
         }))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
@@ -207,6 +257,27 @@ function fileStore(): ShareStore {
       const e = (await load())[id];
       return e?.deliveryRequestedAt ? { requestedAt: e.deliveryRequestedAt, shipping: e.shipping ?? null } : null;
     },
+    async convertVoucher(id, request) {
+      const store = await load();
+      const e = store[id];
+      if (!e) return { result: "not_found" };
+      if (e.voucher) return { result: "already", request: e.voucher };
+      const goal = e.payload.x?.g || e.payload.p.price;
+      const collected = (await getContributionSummary(id))?.collected ?? 0;
+      if (e.deliveryRequestedAt || collected <= 0 || collected >= goal || e.payload.d > Date.now()) return { result: "unavailable" };
+      const voucher: VoucherRequest = { ...request, amount: voucherAmount(collected), collected, requestedAt: Date.now() };
+      store[id] = { ...e, voucher, updatedAt: Date.now() };
+      await save(store);
+      return { result: "converted", request: voucher };
+    },
+    async getOps(id) {
+      const e = (await load())[id];
+      if (!e) return null;
+      const collected = (await getContributionSummary(id))?.collected;
+      return { payload: e.payload.x && collected !== undefined ? { ...e.payload, x: { ...e.payload.x, a: collected } } : e.payload, shipping: e.shipping ?? null };
+    },
+    // 로컬 저장소는 상태를 저장하지 않고 마감일로 계산한다
+    markPendingChoice: async () => [],
   };
 }
 
@@ -224,10 +295,10 @@ function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * 펀딩 요약을 저장하고 짧은 id를 돌려준다.
- * prev(id + 비밀 key)가 맞으면 같은 id의 내용(달성률 등)만 갱신해 링크가 바뀌지 않게 한다.
+ * 공동 선물 요약을 저장하고 짧은 id를 돌려준다.
+ * prev(id + 비밀 key)가 맞으면 같은 id의 내용(완성도 등)만 갱신해 링크가 바뀌지 않게 한다.
  */
-export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: ShippingAddress): Promise<ShortLink> {
+export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: ShippingAddress): Promise<ShortLink & { created?: true }> {
   // payload 컬럼에는 공개 필드 + 운영자 전용 정보(x)만 (그 밖에 클라이언트가 끼워 넣은 값은 화이트리스트로 걸러짐).
   // x는 읽을 때 publicPayload에서 다시 빠지므로 공유 화면에는 나가지 않는다
   // 목표 금액은 클라이언트가 보낸 값을 믿지 않고 서버에서 선물 원가로 다시 계산한다
@@ -235,20 +306,20 @@ export function saveShare(payload: SharePayload, prev?: ShortLink, shipping?: Sh
   const pub: SharePayload = { ...publicPayload(payload), x: { ...(adminExtra(payload) ?? { a: 0 }), g: goal } };
   const goalColumn = goal > 0 && goal <= MAX_GOAL_COLUMN ? goal : null;
   return exclusive(async () => {
-    // 갱신은 달성률 등 요약만 바꾼다. goal 컬럼은 개설 시 정한 값을 유지한다
+    // 갱신은 완성도 등 요약만 바꾼다. goal 컬럼은 개설 시 정한 값을 유지한다
     if (prev && SHORT_ID_RE.test(prev.id)) {
       // 배송 접수 뒤에는 화면에 남아 있던 예전 배송지가 접수한 배송지를 덮어쓰지 않게 한다
       const keepShipping = shipping && (await store.getDelivery(prev.id));
-      // 마감일은 개설 때 정한 값을 유지한다. 바꿀 수 있으면 미달 펀딩의 자동 환불을 미룰 수 있다
+      // 마감일은 만들 때 정한 값을 유지한다. 바꿀 수 있으면 수령 방식 선택 시점을 마음대로 미룰 수 있다
       const stored = await store.get(prev.id);
-      if (await store.update(prev, stored ? { ...pub, d: stored.d } : pub, keepShipping ? undefined : shipping)) return prev;
+      if (await store.update(prev, stored ? { ...pub, d: stored.d } : pub, keepShipping ? undefined : shipping)) return { id: prev.id, key: prev.key };
     }
-    // 마감일이 멀수록 미달 펀딩의 자동 환불이 늦어지므로 개설할 때 상한을 넘지 못하게 한다
+    // 마감일이 멀수록 수령 방식 선택이 늦어지므로 만들 때 상한을 넘지 못하게 한다
     const created: SharePayload = { ...pub, d: Math.min(pub.d, maxDeadline()) };
     const key = randomCode(24);
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = randomCode(ID_LENGTH);
-      if (await store.insert(id, hashKey(key), created, shipping, goalColumn)) return { id, key };
+      if (await store.insert(id, hashKey(key), created, shipping, goalColumn)) return { id, key, created: true as const };
     }
     throw new Error("could not allocate short id");
   });
@@ -280,6 +351,22 @@ export function requestDelivery(id: string, key: string, shipping: ShippingAddre
 /** 배송 접수 기록. 배송지가 들어 있으므로 주최자가 아니면 호출한 쪽에서 빼고 내보낸다 */
 export function getDelivery(id: string) {
   return store.getDelivery(id);
+}
+
+/** 모바일 상품권 전환 신청. 수령인 key 확인은 호출하는 쪽에서 먼저 한다 */
+export function convertShareVoucher(id: string, request: VoucherRequestInput) {
+  return exclusive(() => store.convertVoucher(id, request));
+}
+
+/** 운영 알림용 정보 (원본 상품 링크·수령인 배송지 포함). 서버 안에서만 쓰고 응답으로 내보내지 않는다 */
+export async function getShareForOps(id: string) {
+  if (!SHORT_ID_RE.test(id)) return null;
+  return store.getOps(id);
+}
+
+/** 기간이 끝난 미도달 선물을 수령 방식 선택 대기(PENDING_CHOICE)로 바꾼다 */
+export function markExpiredPendingChoice(nowMs: number, limit: number) {
+  return store.markPendingChoice(nowMs, limit);
 }
 
 /** 관리자 페이지 전용: 배송지까지 포함한 전체 목록 (최신 등록순). 반드시 관리자 인증 뒤에만 호출할 것 */

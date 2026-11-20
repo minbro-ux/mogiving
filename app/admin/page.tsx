@@ -31,14 +31,14 @@ export default async function AdminPage({ searchParams }: Props) {
     loadError = true;
   }
 
-  // 조회 실패를 "환불 문제 없음"으로 보이지 않게 따로 표시한다
+  // 조회 실패를 "결제 취소 문제 없음"으로 보이지 않게 따로 표시한다
   let refunds: RefundAttention[] = [];
   let refundLoadError = false;
   try {
     refunds = await listRefundAttention(REFUND_ATTENTION_LIMIT);
   } catch (e) {
     refundLoadError = true;
-    console.error("[admin] 환불 확인 목록 조회 실패", { error: e instanceof Error ? e.message : String(e), detail: (e as { detail?: unknown }).detail });
+    console.error("[admin] 결제 취소 확인 목록 조회 실패", { error: e instanceof Error ? e.message : String(e), detail: (e as { detail?: unknown }).detail });
   }
 
   return (
@@ -46,7 +46,7 @@ export default async function AdminPage({ searchParams }: Props) {
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">모기빙 운영자 대시보드</h1>
-          <p className="mt-1 text-sm text-gray-500">펀딩 {rows.length}건 · 최신 등록순</p>
+          <p className="mt-1 text-sm text-gray-500">공동 선물 {rows.length}건 · 최신 등록순 · 발주 대기 {rows.filter((r) => r.deliveryRequestedAt).length}건 · 상품권 전환 신청 {rows.filter((r) => r.voucher).length}건</p>
         </div>
         <div className="flex items-center gap-2">
           <a href="/api/admin/export" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
@@ -60,7 +60,7 @@ export default async function AdminPage({ searchParams }: Props) {
 
       {loadError && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">저장소에서 목록을 불러오지 못했어요. 잠시 후 새로고침해 주세요.</p>}
 
-      {refundLoadError && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">환불 상태를 불러오지 못했어요. 실패한 환불이 있을 수 있으니 새로고침해 주세요.</p>}
+      {refundLoadError && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">결제 취소 상태를 불러오지 못했어요. 실패한 취소가 있을 수 있으니 새로고침해 주세요.</p>}
       {refunds.length > 0 && <RefundAttentionPanel refunds={refunds} />}
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
@@ -71,15 +71,15 @@ export default async function AdminPage({ searchParams }: Props) {
               <th className="px-3 py-2 font-semibold">상품</th>
               <th className="px-3 py-2 font-semibold">구매 링크</th>
               <th className="px-3 py-2 font-semibold">옵션</th>
-              <th className="px-3 py-2 font-semibold">펀딩 상태</th>
-              <th className="px-3 py-2 font-semibold">배송 정보</th>
+              <th className="px-3 py-2 font-semibold">선물 상태</th>
+              <th className="px-3 py-2 font-semibold">배송 · 상품권 정보</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 align-top">
             {rows.length === 0 && !loadError && (
               <tr>
                 <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
-                  아직 등록된 펀딩이 없어요
+                  아직 등록된 공동 선물이 없어요
                 </td>
               </tr>
             )}
@@ -116,6 +116,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 </td>
                 <td className="px-3 py-3">{r.option || <span className="text-gray-400">-</span>}</td>
                 <td className="whitespace-nowrap px-3 py-3">
+                  <div className="mb-1 text-xs font-semibold text-gray-700">{r.statusLabel}</div>
                   <div className="font-medium">
                     {won(r.raised)} <span className="text-gray-400">/ {won(r.goal)}</span>
                   </div>
@@ -125,9 +126,19 @@ export default async function AdminPage({ searchParams }: Props) {
                     </div>
                     <span className={`text-xs font-semibold ${r.rate >= 100 ? "text-green-600" : "text-blue-600"}`}>{r.rate}%</span>
                   </div>
-                  {r.estimated && <div className="mt-1 text-[11px] text-gray-400">달성률 기준 추정치</div>}
+                  {r.estimated && <div className="mt-1 text-[11px] text-gray-400">완성도 기준 추정치</div>}
                 </td>
                 <td className="px-3 py-3">
+                  {r.voucher && (
+                    <div className="mb-2 rounded-lg bg-blue-50 p-2 text-xs text-blue-900">
+                      <div className="font-semibold">
+                        상품권 전환 신청 {kstDateTime(r.voucher.requestedAt)} · 발송 필요
+                      </div>
+                      <div className="mt-0.5">
+                        {r.voucher.type} {won(r.voucher.amount)} → {r.voucher.name} {r.voucher.phone}
+                      </div>
+                    </div>
+                  )}
                   {r.deliveryRequestedAt && (
                     <div className="mb-1.5 inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">배송 접수 {kstDateTime(r.deliveryRequestedAt)} · 발주 필요</div>
                   )}
@@ -160,19 +171,19 @@ function RefundAttentionPanel({ refunds }: { refunds: RefundAttention[] }) {
   return (
     <section className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
       <h2 className="font-bold">
-        환불 확인 필요 {refunds.length}
+        결제 취소 확인 필요 {refunds.length}
         {refunds.length >= REFUND_ATTENTION_LIMIT && "건 이상"}
         {refunds.length < REFUND_ATTENTION_LIMIT && "건"} · 실패 {failedCount}건
       </h2>
-      <p className="mt-1 text-xs text-red-800">마감이 지난 미달 펀딩은 매일 자동 환불 때 다시 시도해요. 목표를 달성한 펀딩의 초과 금액 환불은 자동으로 다시 시도되지 않으니 토스 결제 내역을 확인해 주세요.</p>
+      <p className="mt-1 text-xs text-red-800">선물 교환권을 발행하지 못한 결제분(목표 초과·완성 후 결제)의 취소예요. 결제자가 결제 완료 화면을 새로고침하면 다시 시도되지만, 자동으로 다시 시도되지는 않으니 토스 결제 내역을 확인해 주세요.</p>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-xs">
           <thead className="text-red-700">
             <tr>
               <th className="py-1 pr-3 font-semibold">상태</th>
-              <th className="py-1 pr-3 font-semibold">펀딩</th>
+              <th className="py-1 pr-3 font-semibold">선물</th>
               <th className="py-1 pr-3 font-semibold">주문번호</th>
-              <th className="py-1 pr-3 font-semibold">환불 금액</th>
+              <th className="py-1 pr-3 font-semibold">취소 금액</th>
               <th className="py-1 font-semibold">마지막 변경</th>
             </tr>
           </thead>

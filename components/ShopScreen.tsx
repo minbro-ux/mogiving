@@ -39,7 +39,7 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
           <span className="w-3" />
         )}
         <h1 className="text-[18px] font-bold text-grey-900">모기빙</h1>
-        <Badge tone="blue">선물 펀딩</Badge>
+        <Badge tone="blue">공동 선물</Badge>
       </header>
 
       {/* 1. 상품 링크로 위시리스트 만들기 */}
@@ -70,7 +70,7 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
           {[
             { icon: <Link2 size={18} />, t: "선물 등록" },
             { icon: <Gift size={18} />, t: "친구들과 모으기" },
-            { icon: <PackageCheck size={18} />, t: "달성 시 실물 배송" },
+            { icon: <PackageCheck size={18} />, t: "100% 완성 시 실물 배송" },
           ].map((s, i) => (
             <li key={s.t} className="rounded-2xl bg-grey-50 px-2 py-3">
               <div className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-white text-toss-blue">{s.icon}</div>
@@ -178,7 +178,7 @@ function looksComplete(url: string) {
 }
 
 /**
- * 상품 링크 입력 + 붙여넣기 (메인 섹션과 2탄 모금함 시트에서 공용)
+ * 상품 링크 입력 + 붙여넣기 (메인 섹션과 2탄 선물 위시 시트에서 공용)
  * 주소만 넣어도, 쇼핑몰 앱의 [공유하기 → 복사] 글을 통째로 붙여넣어도 된다 (lib/shareText.ts가 링크·쇼핑몰·상품명·가격을 나눔).
  * 링크를 붙여넣으면 기다리지 않고 바로 상품 입력 시트를 연다. 상품명은 시트에서 가볍게 불러와 채운다.
  */
@@ -261,9 +261,9 @@ function LinkInputForm({ onImport }: { onImport: OnImport }) {
   );
 }
 
-/* ------------------------ 다음 모금함(2탄) 열기 바텀시트 ------------------------ */
+/* ------------------------ 다음 선물 위시(2탄) 만들기 바텀시트 ------------------------ */
 
-/** 1차 펀딩 완판 후: 링크 입력 → 상품 확인(LinkImportSheet) 순서로 다음 회차 펀딩 생성 */
+/** 1차 선물 완성 후: 링크 입력 → 상품 확인(LinkImportSheet) 순서로 다음 회차 선물 위시 생성 */
 export function NextWishSheet({
   open,
   round,
@@ -287,7 +287,7 @@ export function NextWishSheet({
   if (link) return <LinkImportSheet key={linkKey(link)} link={link} round={round} initialOwnerName={ownerName} onClose={onClose} onCreate={onCreate} />;
 
   return (
-    <BottomSheet open onClose={onClose} title={`다음 위시리스트 모금함 열기 · ${round}탄`} description="갖고 싶은 다음 선물의 상품 링크를 붙여넣으세요.">
+    <BottomSheet open onClose={onClose} title={`다음 선물 위시 만들기 · ${round}탄`} description="갖고 싶은 다음 선물의 상품 링크를 붙여넣으세요.">
       <div className="mb-4 mt-1 rounded-[20px] bg-toss-blue-light p-4 pt-0.5">
         <LinkInputForm
           onImport={setLink}
@@ -341,7 +341,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
           disabled={!ownerName.trim() || !optionReady(option, p.options) || shippingStatus(shipping) === "partial"}
           onClick={() => onCreate(createFunding(p, { ...purposeText(purpose), ownerName, days, option, shipping: toShipping(shipping) }))}
         >
-          <Gift size={20} /> 이 추천 상품으로 펀딩 열기
+          <Gift size={20} /> 이 추천 상품으로 공동 선물 만들기
         </Button>
       }
     >

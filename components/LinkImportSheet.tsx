@@ -62,7 +62,7 @@ export function LinkImportSheet({
 }: {
   link: ParsedLink | null;
   round?: number;
-  /** 다음 회차 펀딩을 열 때 이전 펀딩의 이름을 미리 채운다 */
+  /** 다음 회차 선물 위시를 만들 때 이전 선물의 이름을 미리 채운다 */
   initialOwnerName?: string;
   onClose: () => void;
   onCreate: (f: Funding) => void;
@@ -135,7 +135,7 @@ export function LinkImportSheet({
       title="상품 정보를 확인해 주세요"
       footer={
         <Button disabled={!valid} onClick={create}>
-          <Gift size={20} /> {round && round > 1 ? `이 상품으로 ${round}탄 펀딩 열기` : "이 상품으로 펀딩 열기"}
+          <Gift size={20} /> {round && round > 1 ? `이 상품으로 ${round}탄 선물 위시 만들기` : "이 상품으로 공동 선물 만들기"}
         </Button>
       }
     >

@@ -1,25 +1,26 @@
 import { percent } from "./format";
 import { PRODUCTS, createFunding, sumAmount } from "./mock";
-import { type ContributionSummary, giftFromDelivery, participantsFromSummary } from "./contribute";
+import { type ContributionSummary, participantsFromSummary, phaseFromStatus } from "./contribute";
+import { giftStatusOf } from "./giftStatus";
 import { type FundingPurpose, isFundingPurpose } from "./purpose";
 import { linkOrigin } from "./site";
 import type { Funding, Product, ShippingAddress } from "./types";
 
 /**
- * 공유 링크로 전달하는 펀딩 요약. 크롤러(OG)와 친구 화면 모두 여기서 복원한다.
+ * 공유 링크로 전달하는 공동 선물 요약. 크롤러(OG)와 친구 화면 모두 여기서 복원한다.
  * 기본은 서버 저장소에 넣고 짧은 id(/f/[shortId])로 공유하며, 저장에 실패하면 링크 자체에 담는다(/f/eyJ…).
  */
 export type SharePayload = {
   id: string;
   /** 주인공 이름 */
   o: string;
-  /** 펀딩 제목 */
+  /** 선물 제목 */
   t: string;
   /** 주최자 한마디. 목적 선택 기능 이전의 링크에는 없으며, 그때는 당시 기본값(생일 문구)으로 복원한다 */
   m?: string;
   /** 선물 목적. 없으면(예전 링크) 생일로 간주한다 */
   k?: FundingPurpose;
-  /** 공유 시점 달성률 (%) */
+  /** 공유 시점 선물 완성도 (%) */
   r: number;
   /** 마감 시각 */
   d: number;
@@ -140,7 +141,7 @@ export function decodeShareToken(token: string): SharePayload | null {
 
 export const fundingSharePath = (f: Funding) => `/f/${toBase64Url(JSON.stringify(toSharePayload(f)))}`;
 
-/** 저장소 없이 펀딩 요약을 통째로 담은 긴 링크 (짧은 링크 발급 실패 시 대체용) */
+/** 저장소 없이 공동 선물 요약을 통째로 담은 긴 링크 (짧은 링크 발급 실패 시 대체용) */
 export const fundingShareUrl = (f: Funding) => new URL(fundingSharePath(f), linkOrigin()).toString();
 
 export type ShortLink = { id: string; key: string | null };
@@ -148,7 +149,7 @@ export type ShortLink = { id: string; key: string | null };
 export const shortShareUrl = (id: string) => new URL(`/f/${id}`, linkOrigin()).toString();
 
 /**
- * 짧은 공유 링크 발급. prev의 비밀 key가 있으면 같은 id에 최신 달성률만 갱신해 링크가 그대로 유지된다.
+ * 짧은 공유 링크 발급. prev의 비밀 key가 있으면 같은 id에 최신 완성도만 갱신해 링크가 그대로 유지된다.
  * 실패하면 null (호출하는 쪽에서 긴 링크로 대체)
  */
 export async function registerShortLink(f: Funding, prev?: ShortLink | null): Promise<ShortLink | null> {
@@ -169,11 +170,11 @@ export async function registerShortLink(f: Funding, prev?: ShortLink | null): Pr
   }
 }
 
-/* -------------------- 주최자 비밀 key (펀딩을 만든 기기에만 보관) -------------------- */
+/* -------------------- 수령인 비밀 key (선물을 만든 기기에만 보관) -------------------- */
 
 const ownerKeyName = (shareId: string) => `mogiving:owner-key:${shareId}`;
 
-/** 펀딩은 며칠 뒤 마감되므로, 주최자가 다시 들어와 결과를 처리할 수 있게 기기에 남겨 둔다 */
+/** 선물 기간은 며칠 뒤 끝나므로, 수령인이 다시 들어와 수령 방식을 고를 수 있게 기기에 남겨 둔다 */
 function rememberOwnerKey(shareId: string, key: string) {
   try {
     localStorage.setItem(ownerKeyName(shareId), key);
@@ -190,13 +191,13 @@ export function recallOwnerKey(shareId: string): string | null {
   }
 }
 
-export const shareTitle = (s: SharePayload) => `${s.o}님의 위시리스트 · ${s.p.name} 조각 펀딩`;
-export const shareDescription = (s: SharePayload) => `커피 한 잔 값으로 축하를 전해보세요. 현재 ${s.r}% 달성 중!`;
+export const shareTitle = (s: SharePayload) => `${s.o}님의 선물 위시 · ${s.p.name} 공동 선물`;
+export const shareDescription = (s: SharePayload) => `커피 한 잔 값으로 선물을 보태 축하를 전해보세요. 현재 선물 완성도 ${s.r}%!`;
 
 /**
- * 공유 링크로 들어온 친구 화면용 펀딩 복원.
+ * 공유 링크로 들어온 친구 화면용 공동 선물 복원.
  * summary(DB 참여 내역)가 있으면 실제 금액으로 채운다.
- * 없으면(긴 링크·저장소 장애) 참여 내역을 지어내지 않고 비워 두며, 링크의 달성률은 마감 여부 판단에만 쓴다
+ * 없으면(긴 링크·저장소 장애) 참여 내역을 지어내지 않고 비워 두며, 링크의 완성도는 단계 판단에만 쓴다
  */
 export function fundingFromShare(s: SharePayload, summary?: ContributionSummary | null): Funding {
   const curated = PRODUCTS.find((p) => p.id === s.p.id);
@@ -205,18 +206,9 @@ export function fundingFromShare(s: SharePayload, summary?: ContributionSummary 
   const base = createFunding(product, { title: s.t, message: s.m, purpose: s.k, ownerName: s.o });
   if (summary) {
     const goal = summary.goal && summary.goal > 0 ? summary.goal : base.goal;
-    return {
-      ...base,
-      id: s.id,
-      goal,
-      deadline: s.d,
-      participants: participantsFromSummary(summary),
-      ...(summary.delivery
-        ? { phase: "done" as const, resolution: giftFromDelivery(product, summary.collected, summary.delivery.shipping) }
-        : summary.refund?.state === "done"
-        ? { phase: "done" as const, resolution: { kind: "cancel" as const, amount: summary.refund.amount, count: summary.refund.count } }
-        : { phase: summary.collected >= goal ? ("achieved" as const) : summary.refund?.state === "in_progress" || s.d <= Date.now() ? ("under" as const) : ("active" as const) }),
-    };
+    const participants = participantsFromSummary(summary);
+    const status = summary.status ?? giftStatusOf({ collected: summary.collected, goal, deadline: s.d });
+    return { ...base, id: s.id, goal, deadline: s.d, participants, ...phaseFromStatus(status, summary, product, participants) };
   }
   return {
     ...base,
@@ -265,7 +257,7 @@ export async function shareOrCopy(data: ShareData, fallbackText: string): Promis
   return (await copyText(fallbackText)) ? "copied" : "failed";
 }
 
-/** 펀딩 공유: 공유 시트에는 제목·설명·링크를, 미지원 환경에서는 링크만 복사 */
+/** 공동 선물 공유: 공유 시트에는 제목·설명·링크를, 미지원 환경에서는 링크만 복사 */
 export function shareFunding(f: Funding, url: string) {
   const s = toSharePayload(f);
   return shareOrCopy({ title: shareTitle(s), text: shareDescription(s), url }, url);

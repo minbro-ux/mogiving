@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Ban, Lock, MapPin, PackageCheck } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Lock, MapPin, PackageCheck } from "lucide-react";
 import { FEE_PERCENT, feeAmount, goalWithFee } from "@/lib/fee";
 import { won } from "@/lib/format";
 import { FUNDING_PERIOD_DAYS } from "@/lib/policy";
@@ -9,25 +9,29 @@ import { DEFAULT_PURPOSE, FUNDING_PURPOSES, type FundingPurpose, MESSAGE_MAX, TI
 import { toOptionItems } from "@/lib/options";
 import type { ProductOption, ShippingAddress } from "@/lib/types";
 import { PostcodeFields, cleanZonecode } from "./AddressSearch";
+import { GiftVoucherNotice } from "./GiftNotice";
 
-/* ------------------------- 펀딩 개설 시트 공통 폼 요소 ------------------------- */
+/* ------------------------- 공동 선물 만들기 시트 공통 폼 요소 ------------------------- */
 
 export function SafetyNote() {
   return (
+    <>
     <div className="mb-2 mt-5 space-y-2.5 rounded-2xl bg-grey-50 p-4 text-[13px] text-grey-700">
       <p className="flex items-center gap-2">
-        <PackageCheck size={16} className="shrink-0 text-grey-500" /> 목표 달성 시 즉시 마감되고, 쇼핑몰에서 실물로 배송돼요
+        <PackageCheck size={16} className="shrink-0 text-grey-500" /> 선물이 100% 완성되면 쇼핑몰에서 실물로 배송돼요
       </p>
       <p className="flex items-center gap-2">
-        <Ban size={16} className="shrink-0 text-grey-500" /> 목표 금액까지만 모이고, 미달 시 친구들의 결제는 전액 취소돼요
+        <BadgeCheck size={16} className="shrink-0 text-grey-500" /> 기간 내 미완성이어도 결제는 취소되지 않고, 차액 결제 또는 모바일 상품권으로 받아요
       </p>
     </div>
+    <GiftVoucherNotice className="mb-2 mt-3" />
+    </>
   );
 }
 
 export function PeriodPicker({ value, onChange }: { value: number; onChange: (d: number) => void }) {
   return (
-    <FormField label="모금 기간">
+    <FormField label="선물 기간">
       <div className="grid grid-cols-3 gap-2">
         {FUNDING_PERIOD_DAYS.map((d) => (
           <button
@@ -79,7 +83,7 @@ export function PriceAccuracyNotice() {
   return (
     <p className="mt-1.5 flex items-start gap-1 text-[12px] leading-relaxed text-toss-orange">
       <AlertTriangle size={13} className="mt-[2px] shrink-0" />
-      입력하신 금액이 실제 링크의 판매가와 다를 경우 펀딩 성공 후 선물 배송이 제한될 수 있으니 정확한 판매가를 입력해주세요.
+      입력하신 금액이 실제 링크의 판매가와 다를 경우 선물 완성 후 배송이 제한될 수 있으니 정확한 판매가를 입력해주세요.
     </p>
   );
 }
@@ -103,7 +107,7 @@ export function FeeSummary({ basePrice }: { basePrice: number }) {
           <dd className="text-[18px] font-bold text-toss-blue">{won(goalWithFee(basePrice))}</dd>
         </div>
       </dl>
-      <p className="mt-2.5 text-[12px] leading-relaxed text-grey-600">선물 결제 시 부족함이 없도록 결제 및 운영 수수료 {FEE_PERCENT}%가 포함된 금액으로 펀딩이 개설됩니다.</p>
+      <p className="mt-2.5 text-[12px] leading-relaxed text-grey-600">선물 결제 시 부족함이 없도록 결제 및 운영 수수료 {FEE_PERCENT}%가 포함된 금액으로 공동 선물이 만들어집니다.</p>
       <p className="mt-1 text-[12px] text-grey-500">최종 목표 금액은 100원 단위로 올림돼요.</p>
     </div>
   );
@@ -149,7 +153,7 @@ export function PurposeFields({ value, round = 1, onChange }: { value: PurposeDr
           })}
         </div>
       </FormField>
-      <FormField label="펀딩 제목">
+      <FormField label="선물 제목">
         <input
           value={value.title}
           maxLength={TITLE_MAX}
@@ -174,12 +178,12 @@ export function PurposeFields({ value, round = 1, onChange }: { value: PurposeDr
 
 /* ---------------------------- 이름 · 옵션 · 배송지 ---------------------------- */
 
-/** 펀딩 주인공 이름 (필수). 친구 화면과 공유 제목·미리보기에 그대로 나간다 */
+/** 공동 선물 주인공 이름 (필수). 친구 화면과 공유 제목·미리보기에 그대로 나간다 */
 export function OwnerNameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <FormField label="내 이름" hint={<span className="text-[12px] text-toss-blue">필수</span>}>
       <input value={value} maxLength={20} onChange={(e) => onChange(e.target.value)} placeholder="친구들이 알아볼 수 있는 이름" className={inputClass} />
-      <p className="mt-1.5 text-[12px] text-grey-500">공유 링크와 펀딩 화면에 이 이름으로 표시돼요</p>
+      <p className="mt-1.5 text-[12px] text-grey-500">공유 링크와 선물 화면에 이 이름으로 표시돼요</p>
     </FormField>
   );
 }
@@ -258,7 +262,7 @@ export function OptionField({ value, onChange, options, allowCustom = false }: {
         )}
       </div>
       {custom && <div className="mt-2">{input}</div>}
-      {!items.some((o) => !o.soldOut) && <p className="mt-2 text-[13px] text-toss-red">모든 옵션이 품절이라 지금은 펀딩을 열 수 없어요{allowCustom ? ". 다른 옵션은 직접 입력해 주세요" : ""}</p>}
+      {!items.some((o) => !o.soldOut) && <p className="mt-2 text-[13px] text-toss-red">모든 옵션이 품절이라 지금은 공동 선물을 만들 수 없어요{allowCustom ? ". 다른 옵션은 직접 입력해 주세요" : ""}</p>}
     </FormField>
   );
 }
@@ -322,7 +326,7 @@ export function toShipping(s: ShippingAddress): ShippingAddress | undefined {
   return { name: s.name.trim(), phone: s.phone.trim(), ...(zonecode ? { zonecode } : {}), address: s.address.trim(), detail: s.detail.trim(), ...(memo ? { memo } : {}) };
 }
 
-/** 선물 수령용 배송지. 지금 비워 두면 펀딩 성공 후 수령 단계에서 입력한다 */
+/** 선물 수령용 배송지. 지금 비워 두면 선물 완성 후 수령 단계에서 입력한다 */
 export function ShippingFields({ value, onChange }: { value: ShippingAddress; onChange: (v: ShippingAddress) => void }) {
   const set = (patch: Partial<ShippingAddress>) => onChange({ ...value, ...patch });
   const partial = shippingStatus(value) === "partial";

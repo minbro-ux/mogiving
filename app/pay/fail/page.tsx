@@ -16,7 +16,7 @@ export default function PayFailPage({ searchParams: { code, share } }: Props) {
         <p className="mt-2 text-[15px] leading-relaxed text-grey-600">결제 금액은 청구되지 않았어요. 다시 시도해 주세요.</p>
         {!canceled && code && <p className="mt-2 text-[13px] text-grey-500">오류 코드: {code.slice(0, 60)}</p>}
         <a href={back} className="mt-8 flex h-14 w-full items-center justify-center rounded-2xl bg-toss-blue text-[17px] font-bold text-white">
-          {back === "/" ? "처음으로" : "펀딩으로 돌아가기"}
+          {back === "/" ? "처음으로" : "선물로 돌아가기"}
         </a>
       </div>
     </main>

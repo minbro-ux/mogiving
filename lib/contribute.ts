@@ -1,7 +1,8 @@
-import type { ContributionSummary, StoredContribution } from "./contributionStore";
-import type { Funding, FundingGift, Participant, Product, ShippingAddress } from "./types";
+import type { ContributionSummary, FundingVoucherInfo, StoredContribution } from "./contributionStore";
+import type { VoucherType } from "./policy";
+import type { Funding, FundingGift, FundingVoucher, GiftStatus, Participant, Phase, Product, Resolution, ShippingAddress } from "./types";
 
-/** 조각 선물 동기화 (클라이언트 ↔ /api/contribute). 저장은 결제 승인 API에서만 일어난다 */
+/** 선물 보태기 동기화 (클라이언트 ↔ /api/contribute). 저장은 결제 승인 API에서만 일어난다 */
 
 export type { ContributionSummary };
 
@@ -25,8 +26,8 @@ export async function fetchContributionSummary(shareId: string, ownerKey?: strin
 }
 
 const DELIVERY_ERRORS: Record<string, string> = {
-  forbidden: "이 펀딩을 만든 기기에서만 접수할 수 있어요",
-  funding_not_achieved: "목표 금액을 달성한 펀딩만 배송을 접수할 수 있어요",
+  forbidden: "이 선물을 만든 기기에서만 접수할 수 있어요",
+  funding_not_achieved: "100% 완성된 선물만 배송을 접수할 수 있어요",
   bad_shipping: "받는 분, 연락처, 주소를 다시 확인해 주세요",
 };
 
@@ -44,9 +45,49 @@ export async function requestDelivery(shareId: string, key: string, shipping: Sh
   }
 }
 
+const VOUCHER_ERRORS: Record<string, string> = {
+  forbidden: "이 선물을 만든 기기에서만 신청할 수 있어요",
+  voucher_unavailable: "기간이 끝난 미완성 선물만 모바일 상품권으로 받을 수 있어요. 화면을 새로고침해 주세요",
+  bad_contact: "받는 분 이름과 휴대폰 번호를 다시 확인해 주세요",
+  bad_voucher_type: "상품권 종류를 다시 골라 주세요",
+};
+
+/** 모바일 상품권 전환 신청. 이미 신청했다면 먼저 신청한 내용을 돌려준다 */
+export async function requestVoucher(
+  shareId: string,
+  key: string,
+  input: { voucherType: VoucherType; name: string; phone: string },
+): Promise<{ ok: true; voucher: FundingVoucherInfo } | { ok: false; message: string }> {
+  try {
+    const res = await fetch("/api/voucher", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shareId, key, ...input }) });
+    const body = (await res.json().catch(() => null)) as { ok: boolean; error?: string; voucher?: FundingVoucherInfo } | null;
+    if (res.ok && body?.ok && body.voucher) return { ok: true, voucher: body.voucher };
+    console.error("[mogiving] 모바일 상품권 전환 신청 실패", { shareId, status: res.status, code: body?.error });
+    return { ok: false, message: (body?.error && VOUCHER_ERRORS[body.error]) || "신청하지 못했어요. 잠시 후 다시 시도해 주세요" };
+  } catch (e) {
+    console.error("[mogiving] 모바일 상품권 전환 요청 실패 (네트워크)", e);
+    return { ok: false, message: "네트워크 연결을 확인하고 다시 시도해 주세요" };
+  }
+}
+
 /** 서버에 접수된 배송을 화면 상태로. 친구 시점에는 배송지가 오지 않으므로 빈 값이 된다 */
-export function giftFromDelivery(product: Product, collected: number, shipping?: ShippingAddress): FundingGift {
-  return { kind: "gift", product, reason: "achieved", address: shipping ?? { name: "", phone: "", address: "", detail: "" }, collected };
+export function giftFromDelivery(product: Product, participants: Participant[], shipping?: ShippingAddress): FundingGift {
+  const extraPaid = participants.filter((p) => p.nickname === TOPUP_LABEL).reduce((s, p) => s + p.amount, 0);
+  const collected = participants.reduce((s, p) => s + p.amount, 0) - extraPaid;
+  return { kind: "gift", product, reason: extraPaid > 0 ? "topup" : "achieved", address: shipping ?? { name: "", phone: "", address: "", detail: "" }, collected, ...(extraPaid ? { extraPaid } : {}) };
+}
+
+export function voucherFromInfo(v: FundingVoucherInfo): FundingVoucher {
+  return { kind: "voucher", requestedAt: v.requestedAt, amount: v.amount, voucherType: v.type };
+}
+
+/** 서버 상태 → 화면 단계와 결과 */
+export function phaseFromStatus(status: GiftStatus, s: Pick<ContributionSummary, "delivery" | "voucher">, product: Product, participants: Participant[]): { phase: Phase; resolution?: Resolution } {
+  if (status === "CONVERTED_VOUCHER") return { phase: "done", resolution: voucherFromInfo(s.voucher ?? { requestedAt: Date.now() }) };
+  if (s.delivery) return { phase: "done", resolution: giftFromDelivery(product, participants, s.delivery.shipping) };
+  if (status === "COMPLETED_FULL") return { phase: "achieved" };
+  if (status === "PENDING_CHOICE") return { phase: "under" };
+  return { phase: "active" };
 }
 
 /* ---------------------- 내가 보낸 선물 (이 브라우저에만 보관) ---------------------- */
@@ -74,6 +115,9 @@ export function recallMyContributions(shareId: string): StoredContribution[] {
 
 /* ------------------------------ 화면 상태에 반영 ------------------------------ */
 
+/** 서버의 차액 결제 참여 이름 (contributionStore.TOPUP_NICKNAME과 같음) */
+const TOPUP_LABEL = "차액 결제";
+
 export function participantFromStored(c: StoredContribution, isMe = false): Participant {
   return { id: `${DB_PREFIX}${c.id}`, nickname: c.nickname, message: c.message, amount: c.amount, createdAt: c.createdAt, isMe };
 }
@@ -88,15 +132,12 @@ export function participantsFromSummary(s: ContributionSummary, mine: StoredCont
   });
 }
 
-/** DB 요약을 펀딩 상태에 합친다 */
+/** DB 요약을 선물 상태에 합친다 */
 export function applySummary(f: Funding, s: ContributionSummary, mine: StoredContribution[]): Funding {
   const goal = s.goal && s.goal > 0 ? s.goal : f.goal;
   const participants = participantsFromSummary(s, mine).sort((a, b) => a.createdAt - b.createdAt);
   const raised = participants.reduce((sum, p) => sum + p.amount, 0);
-  // 서버에서 전액 취소가 끝난 펀딩은 어느 화면에서든 취소됨으로 보여준다
-  if (s.refund?.state === "done") return { ...f, goal, participants, phase: "done", resolution: { kind: "cancel", amount: s.refund.amount, count: s.refund.count } };
-  // 배송 접수도 서버 기준으로 복원한다
-  if (s.delivery) return { ...f, goal, participants, phase: "done", resolution: giftFromDelivery(f.product, raised, s.delivery.shipping) };
-  const phase = f.phase === "active" && raised >= goal ? "achieved" : f.phase;
-  return { ...f, goal, participants, phase };
+  const status: GiftStatus = s.status ?? (raised >= goal ? "COMPLETED_FULL" : f.deadline <= Date.now() ? "PENDING_CHOICE" : "ACTIVE");
+  const { phase, resolution } = phaseFromStatus(status, s, f.product, participants);
+  return { ...f, goal, participants, phase, resolution };
 }

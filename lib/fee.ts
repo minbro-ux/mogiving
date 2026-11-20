@@ -9,3 +9,9 @@ export const goalWithFee = (basePrice: number) => (basePrice > 0 ? Math.ceil((ba
 
 /** 화면에 보여줄 수수료. 올림분을 포함해 '선물 금액 + 수수료 = 목표 금액'이 항상 맞게 한다 */
 export const feeAmount = (basePrice: number) => goalWithFee(basePrice) - Math.max(0, basePrice);
+
+/**
+ * 모바일 상품권 전환 금액: 적립 금액에서 플랫폼 수수료 비율을 뺀 원가 상당액 (원 단위 내림).
+ * 목표 금액 = 원가 × (100 + 수수료%) / 100 이므로 그 역산이다. DB 함수 mogiving_convert_voucher와 같은 계산
+ */
+export const voucherAmount = (collected: number) => (collected > 0 ? Math.floor((collected * 100) / (100 + FEE_PERCENT)) : 0);

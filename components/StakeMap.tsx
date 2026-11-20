@@ -186,7 +186,7 @@ export function StakeMapSheet({
   funding: Funding;
   viewerIsOwner: boolean;
   onClose: () => void;
-  /** 펀딩 완료 후 받는 사람에게만 전달 */
+  /** 선물 완성 후 받는 사람에게만 전달 */
   onMakeCard?: () => void;
 }) {
   const stakes = useMemo(() => computeStakes(funding), [funding]);
@@ -253,7 +253,7 @@ export function StakeMapSheet({
               </li>
             )}
           </ul>
-          {!onMakeCard && <p className="pb-2 pt-5 text-[13px] text-grey-500">펀딩이 완료되면 공유용 지분 인증 카드를 만들 수 있어요.</p>}
+          {!onMakeCard && <p className="pb-2 pt-5 text-[13px] text-grey-500">선물이 완성되면 공유용 지분 인증 카드를 만들 수 있어요.</p>}
         </>
       ) : (
         <div className="mb-2 mt-5 rounded-2xl bg-grey-50 p-4 text-center">

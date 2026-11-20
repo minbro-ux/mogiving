@@ -11,12 +11,12 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: { token: string } };
 
-/** 짧은 id(/f/aB3xK9p)는 서버 저장소에서, 예전 긴 링크(/f/eyJ…)는 링크 자체에서 펀딩 요약을 꺼낸다 */
+/** 짧은 id(/f/aB3xK9p)는 서버 저장소에서, 예전 긴 링크(/f/eyJ…)는 링크 자체에서 공동 선물 요약을 꺼낸다 */
 async function resolveShare(token: string): Promise<SharePayload | null> {
   return SHORT_ID_RE.test(token) ? getShare(token) : decodeShareToken(token);
 }
 
-/** DB에 쌓인 실제 참여 내역 (긴 링크거나 조회 실패 시 null → 참여 내역은 비우고, OG 설명은 링크의 달성률로 대체) */
+/** DB에 쌓인 실제 참여 내역 (긴 링크거나 조회 실패 시 null → 참여 내역은 비우고, OG 설명은 링크의 완성도로 대체) */
 async function resolveSummary(token: string): Promise<ContributionSummary | null> {
   if (!SHORT_ID_RE.test(token)) return null;
   try {
@@ -27,7 +27,7 @@ async function resolveSummary(token: string): Promise<ContributionSummary | null
   }
 }
 
-/** OG 설명·화면의 달성률을 DB 누적 금액 기준으로 맞춘다 */
+/** OG 설명·화면의 완성도을 DB 누적 금액 기준으로 맞춘다 */
 const withLiveRate = (s: SharePayload, summary: ContributionSummary | null): SharePayload =>
   summary?.goal ? { ...s, r: Math.min(100, Math.floor((summary.collected / summary.goal) * 100)) } : s;
 
@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-/** 친구가 공유 링크로 들어오는 펀딩 상세 화면 */
+/** 친구가 공유 링크로 들어오는 공동 선물 상세 화면 */
 export default async function SharedFundingPage({ params }: Props) {
   const s = await resolveShare(params.token);
   if (!s) notFound();

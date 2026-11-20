@@ -1,24 +1,28 @@
 import type { StoredContribution } from "./contributionStore";
 
 /**
- * 조각 선물 결제 (브라우저) — 주문 생성 → 토스페이먼츠 결제창 → /pay/success에서 서버 승인.
+ * 선물 보태기(선물 교환권 구매)·차액 결제 (브라우저) — 주문 생성 → 토스페이먼츠 결제창 → /pay/success에서 서버 승인.
  * 결제창은 카드·토스페이 등을 함께 보여주는 통합결제창을 쓴다.
  */
 
 const PREPARE_ERRORS: Record<string, string> = {
-  funding_closed: "이미 마감된 펀딩이에요. 화면을 새로고침해 주세요",
+  funding_closed: "이미 완성되었거나 기간이 끝난 선물이에요. 화면을 새로고침해 주세요",
   amount_over_remaining: "그사이 남은 금액이 줄었어요. 화면을 새로고침한 뒤 다시 선택해 주세요",
   amount_leaves_too_little: "결제 후 100원 미만이 남지 않게 금액을 조금 바꿔 주세요",
-  share_not_found: "펀딩 정보를 찾을 수 없어요",
-  invalid_amount: "참여 금액을 다시 확인해 주세요",
+  share_not_found: "선물 정보를 찾을 수 없어요",
+  invalid_amount: "보탤 금액을 다시 확인해 주세요",
+  topup_unavailable: "지금은 차액을 결제할 수 없는 선물이에요. 화면을 새로고침해 주세요",
+  forbidden: "이 선물을 만든 기기에서만 결제할 수 있어요",
   bad_nickname: "이름은 1~20자로 입력해 주세요",
   bad_message: "메시지는 300자까지 쓸 수 있어요",
   payment_not_configured: "결제 설정이 아직 완료되지 않았어요. 고객센터로 문의해 주세요",
 };
 const DEFAULT_ERROR = "결제를 시작하지 못했어요. 잠시 후 다시 시도해 주세요";
 
-/** 결제창을 연다. 실패하면 오류 문구, 구매자가 창을 닫으면 "canceled", 페이지 이동이 시작되면 "redirecting" */
-export async function startTossPayment(shareId: string, input: { nickname: string; message: string; amount: number }): Promise<{ status: "redirecting" | "canceled" } | { status: "error"; message: string }> {
+type PayResult = { status: "redirecting" | "canceled" } | { status: "error"; message: string };
+
+/** 주문을 만들고 결제창을 연다. 실패하면 오류 문구, 구매자가 창을 닫으면 "canceled", 페이지 이동이 시작되면 "redirecting" */
+async function openTossPayment(shareId: string, body: Record<string, unknown>): Promise<PayResult> {
   const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
   if (!clientKey) {
     console.error("[mogiving] NEXT_PUBLIC_TOSS_CLIENT_KEY가 설정되지 않았습니다");
@@ -27,14 +31,14 @@ export async function startTossPayment(shareId: string, input: { nickname: strin
 
   let order: { orderId: string; orderName: string; amount: number };
   try {
-    const res = await fetch("/api/payments/prepare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shareId, ...input }) });
-    const body = (await res.json().catch(() => null)) as ({ ok: true; orderId: string; orderName: string; amount: number } | { ok: false; error?: string }) | null;
-    if (!res.ok || !body?.ok) {
-      const code = body && !body.ok ? body.error : undefined;
+    const res = await fetch("/api/payments/prepare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shareId, ...body }) });
+    const json = (await res.json().catch(() => null)) as ({ ok: true; orderId: string; orderName: string; amount: number } | { ok: false; error?: string }) | null;
+    if (!res.ok || !json?.ok) {
+      const code = json && !json.ok ? json.error : undefined;
       console.error("[mogiving] 결제 주문 생성 실패", { shareId, status: res.status, code });
       return { status: "error", message: (code && PREPARE_ERRORS[code]) || DEFAULT_ERROR };
     }
-    order = body;
+    order = json;
   } catch (e) {
     console.error("[mogiving] 결제 주문 요청 실패 (네트워크)", e);
     return { status: "error", message: "네트워크 연결을 확인하고 다시 시도해 주세요" };
@@ -62,37 +66,20 @@ export async function startTossPayment(shareId: string, input: { nickname: strin
   }
 }
 
-const REFUND_ERRORS: Record<string, string> = {
-  forbidden: "이 펀딩을 만든 기기에서만 취소할 수 있어요",
-  funding_active: "아직 진행 중인 펀딩은 취소할 수 없어요",
-  funding_achieved: "목표 금액을 달성한 펀딩은 취소할 수 없어요",
-};
-const MAX_REFUND_ROUNDS = 6;
+/** 선물 보태기: 결제 즉시 수령인의 지정 선물 전용 교환권이 발행(구매 확정)된다 */
+export function startTossPayment(shareId: string, input: { nickname: string; message: string; amount: number }): Promise<PayResult> {
+  return openTossPayment(shareId, input);
+}
 
-/** 미달 펀딩 전액 취소. 서버가 시간 안에 다 끝내지 못하면 이어서 다시 요청한다 */
-export async function refundFunding(shareId: string, key: string): Promise<{ ok: true; amount: number; count: number } | { ok: false; message: string }> {
-  try {
-    for (let round = 0; round < MAX_REFUND_ROUNDS; round++) {
-      const res = await fetch("/api/payments/refund-funding", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shareId, key }) });
-      const body = (await res.json().catch(() => null)) as { ok: boolean; error?: string; finished?: boolean; failed?: number; remaining?: number; amount?: number; count?: number } | null;
-      if (!res.ok || !body?.ok) {
-        const code = body?.error;
-        console.error("[mogiving] 펀딩 전액 취소 실패", { shareId, status: res.status, code });
-        return { ok: false, message: (code && REFUND_ERRORS[code]) || "환불을 처리하지 못했어요. 잠시 후 다시 시도해 주세요" };
-      }
-      if (body.finished) return { ok: true, amount: body.amount ?? 0, count: body.count ?? 0 };
-      if (body.failed) return { ok: false, message: `결제 ${body.failed}건을 아직 취소하지 못했어요. 다시 시도하면 남은 결제만 이어서 취소해요` };
-    }
-    return { ok: false, message: "환불이 아직 끝나지 않았어요. 다시 시도하면 남은 결제만 이어서 취소해요" };
-  } catch (e) {
-    console.error("[mogiving] 펀딩 전액 취소 요청 실패 (네트워크)", e);
-    return { ok: false, message: "네트워크 연결을 확인하고 다시 시도해 주세요. 다시 시도해도 중복 환불되지 않아요" };
-  }
+/** 수령인 차액 결제: 기간이 끝난 미도달 선물의 남은 금액(서버가 정함)을 결제해 100% 완성한다 */
+export function startTopupPayment(shareId: string, key: string): Promise<PayResult> {
+  return openTossPayment(shareId, { kind: "topup", key });
 }
 
 export type ConfirmOk = {
   ok: true;
   shareId: string;
+  kind: "gift" | "topup";
   amount: number;
   recordedAmount: number;
   refundAmount: number;

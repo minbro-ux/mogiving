@@ -10,9 +10,10 @@ import type { startTossPayment } from "@/lib/payment";
 import { copyText } from "@/lib/share";
 import { cheerPresets } from "@/lib/purpose";
 import type { Funding } from "@/lib/types";
+import { GiftVoucherNotice } from "./GiftNotice";
 import { BottomSheet, Button, PieceGrid, ProductThumb, Segmented, Spinner } from "./ui";
 
-/* ------------------------------- 펀딩 참여 시트 ------------------------------- */
+/* ------------------------- 선물 보태기 (선물 교환권 구매) 시트 ------------------------- */
 
 const QUICK = [5000, 10000, 30000, 50000];
 const PIECE_QUICK = [1, 2, 3, 5];
@@ -95,14 +96,14 @@ export function ParticipateSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      title="얼마나 보탤까요?"
+      title="선물을 얼마나 보탤까요?"
       description={`총 ${pieces.total}조각 중 ${pieces.remaining}조각 남았어요`}
       footer={
         <Button onClick={pay} disabled={!valid}>
           {mode === "piece" ? (
-            `총 ${pieces.total}조각 중 ${count}조각 선물하기`
+            `${count}조각 · ${won(amount)} 선물 교환권 선물하기`
           ) : amount > 0 ? (
-            `${won(amount)} 결제하기`
+            `${won(amount)} 선물 교환권 선물하기`
           ) : (
             "결제하기"
           )}
@@ -200,7 +201,7 @@ export function ParticipateSheet({
             )}
           </div>
           {freeAmount === remaining && (
-            <p className="mt-2 text-[13px] text-toss-blue">남은 금액을 모두 채우면 펀딩이 바로 성공으로 마감돼요.</p>
+            <p className="mt-2 text-[13px] text-toss-blue">남은 금액을 모두 채우면 선물이 바로 100% 완성돼요.</p>
           )}
           {freeAmount > 0 && problem === "too_small" && <p className="mt-2 text-[13px] text-toss-red">1,000원부터 참여할 수 있어요</p>}
           {problem === "leaves_too_little" && <p className="mt-2 text-[13px] text-toss-red">결제 후 100원 미만이 남지 않게 금액을 조금 바꿔 주세요</p>}
@@ -239,6 +240,8 @@ export function ParticipateSheet({
       <p className="mt-1.5 flex items-start gap-1 text-[12px] leading-relaxed text-grey-500">
         <Info size={12} className="mt-[3px] shrink-0" /> 목표 금액에는 원활한 선물 전달을 위한 플랫폼 수수료 {FEE_PERCENT}%가 포함되어 있어요
       </p>
+      {/* 결제 화면 하단: 결제 즉시 구매 확정되는 상품임을 결제 버튼 누르기 전에 알린다 */}
+      <GiftVoucherNotice className="mb-2 mt-4" />
     </BottomSheet>
   );
 }
@@ -280,7 +283,7 @@ export function ShareSheet({
   };
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="친구에게 공유하기" description="링크를 받은 친구는 토스에서 바로 조각을 선물할 수 있어요.">
+    <BottomSheet open={open} onClose={onClose} title="친구에게 공유하기" description="링크를 받은 친구는 바로 선물을 보탤 수 있어요.">
       <div className="mt-4 flex items-center gap-2 rounded-xl bg-grey-100 py-1.5 pl-4 pr-1.5">
         <Link2 size={17} className="shrink-0 text-grey-500" />
         <span className={`flex-1 truncate text-[15px] ${link ? "text-grey-700" : "text-grey-400"}`}>{link ?? "공유 링크를 만들고 있어요…"}</span>

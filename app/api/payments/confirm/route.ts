@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { type FinalizeResult, type PaymentOrder, PaymentStoreError, finalizePayment, fundingAvailability, getPaymentOrder, markOrderApproved, markOrderFailed, setRefundStatus } from "@/lib/paymentStore";
+import { alertGiftCompleted } from "@/lib/opsAlerts";
 import { cancelTossPayment, confirmTossPayment, getTossPayment } from "@/lib/tossServer";
 
 export const runtime = "nodejs";
@@ -9,14 +10,15 @@ const ORDER_ID_RE = /^[A-Za-z0-9_=-]{6,64}$/;
 
 const bad = (error: string, status = 400) => NextResponse.json({ ok: false, error }, { status });
 
-/** 자동 환불. 실패하면 상태를 남겨 두고, 같은 주문을 다시 확인할 때 재시도한다 */
+/**
+ * 교환권을 발행하지 못한 결제분(그사이 선물이 완성·기간 종료되어 반영되지 않은 금액)만 결제 취소한다.
+ * 실패하면 상태를 남겨 두고, 같은 주문을 다시 확인할 때 재시도한다
+ */
 async function settleRefund(order: PaymentOrder, paymentKey: string, r: FinalizeResult): Promise<FinalizeResult> {
   if (r.refundAmount <= 0 || r.refundStatus === "done") return r;
-  // 모금액에 반영된 주문의 전액 환불은 주최자의 펀딩 취소(refund-funding)가 맡는다
-  if (r.recordedAmount > 0 && r.refundAmount >= order.amount) return r;
-  const res = await cancelTossPayment(paymentKey, order.orderId, r.refundAmount, "펀딩 마감 또는 목표 금액 초과로 자동 취소");
+  const res = await cancelTossPayment(paymentKey, order.orderId, r.refundAmount, "선물 교환권 미발행분 결제 취소 (선물이 이미 완성되었거나 기간이 끝남)");
   const done = res.ok || res.code === "ALREADY_CANCELED_PAYMENT";
-  if (!done) console.error("[api/payments/confirm] 자동 환불 실패 — 수동 확인 필요", { orderId: order.orderId, refundAmount: r.refundAmount, code: !res.ok ? res.code : undefined });
+  if (!done) console.error("[api/payments/confirm] 미발행분 결제 취소 실패 — 수동 확인 필요", { orderId: order.orderId, refundAmount: r.refundAmount, code: !res.ok ? res.code : undefined });
   const refundStatus = done ? "done" : "failed";
   await setRefundStatus(order.orderId, refundStatus);
   return { ...r, refundStatus };
@@ -26,6 +28,7 @@ function respond(order: PaymentOrder, r: FinalizeResult) {
   return NextResponse.json({
     ok: true,
     shareId: r.shareId,
+    kind: r.kind,
     amount: order.amount,
     recordedAmount: r.recordedAmount,
     refundAmount: r.refundAmount,
@@ -40,7 +43,8 @@ function respond(order: PaymentOrder, r: FinalizeResult) {
 
 /**
  * POST /api/payments/confirm { paymentKey, orderId, amount }
- * 결제창 성공 후 호출: 금액 검증 → 토스 승인 → mogiving_finalize_payment()로 모금액 반영 → 필요하면 자동 환불.
+ * 결제창 성공 후 호출: 금액 검증 → 토스 승인 → mogiving_finalize_payment()로 선물 교환권 발행(구매 확정)
+ * → 100% 완성이면 운영 알림 → 반영하지 못한 초과분만 결제 취소.
  * 새로고침·재시도해도 승인과 반영은 주문당 한 번만 일어난다.
  */
 export async function POST(req: NextRequest) {
@@ -66,10 +70,16 @@ export async function POST(req: NextRequest) {
     if (order.paymentKey && order.paymentKey !== paymentKey) return bad("payment_key_mismatch", 403);
 
     if (order.status === "pending") {
-      // 청구되기 전에 마감·잔여 금액을 확인한다. 펀딩을 읽지 못했을 때는 실패로 확정하지 않고 재시도하게 한다
+      // 청구되기 전에 상태·잔여 금액을 확인한다. 선물을 읽지 못했을 때는 실패로 확정하지 않고 재시도하게 한다
       const funding = await fundingAvailability(order.shareId);
       if (!funding) return bad("store_unavailable", 503);
-      if (!funding.open || order.amount > funding.remaining) {
+      if (order.kind === "topup") {
+        // 차액 결제: 수령 방식 선택 대기 중이고 남은 차액이 주문 금액과 그대로일 때만
+        if (!funding.pendingChoice || order.amount !== funding.remaining) {
+          await markOrderFailed(orderId, "topup_unavailable");
+          return NextResponse.json({ ok: false, error: "topup_unavailable", shareId: order.shareId, charged: false }, { status: 409 });
+        }
+      } else if (!funding.open || order.amount > funding.remaining) {
         await markOrderFailed(orderId, funding.open ? "amount_over_remaining" : "funding_closed");
         return NextResponse.json({ ok: false, error: funding.open ? "amount_over_remaining" : "funding_closed", shareId: order.shareId, charged: false }, { status: 409 });
       }
@@ -99,6 +109,8 @@ export async function POST(req: NextRequest) {
 
     // 여기까지 오면 승인된 결제. 저장에 실패해도 approved로 남으므로 같은 요청을 다시 보내면 이어서 처리된다
     const result = await finalizePayment(orderId, paymentKey);
+    // 이 결제로 선물이 처음 100% 완성됐으면 운영자에게 실물 발주를 요청한다 (알림 실패는 결제 결과에 영향 없음)
+    if (result.completedNow) await alertGiftCompleted(result.shareId, result.kind === "topup" ? result.recordedAmount : undefined);
     return respond(order, await settleRefund(order, paymentKey, result));
   } catch (e) {
     const code = e instanceof PaymentStoreError ? e.code : "store_unavailable";

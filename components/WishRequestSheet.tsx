@@ -17,7 +17,7 @@ const OCCASIONS = [
 
 /**
  * 역발상 진입 플로우: 축하받을 친구에게 "원하는 선물 링크를 보내줘"라고 요청하는 초대 링크 생성.
- * 친구가 링크(/r/[code])에서 상품 URL을 등록하면 그 친구 명의의 펀딩이 열리는 구조.
+ * 친구가 링크(/r/[code])에서 상품 URL을 등록하면 그 친구 명의의 공동 선물이 만들어지는 구조.
  */
 export function WishRequestSheet({ open, onClose, onCopied }: { open: boolean; onClose: () => void; onCopied: (msg: string) => void }) {
   const [occasion, setOccasion] = useState(OCCASIONS[0].label);

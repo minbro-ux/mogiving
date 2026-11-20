@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { COMPANY, LEGAL_LINKS, bizInfoUrl } from "@/lib/company";
+import { UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE } from "@/lib/policy";
 
 /**
  * 서비스 공통 하단 사업자 정보 (app/layout.tsx에서 모든 화면에 렌더링).
@@ -25,8 +26,8 @@ export function Footer() {
         "발급 예정"
       ),
     },
-    { label: "통신판매업신고번호", value: COMPANY.mailOrderNumber || "신고 예정" },
-    { label: "사업장 소재지", value: COMPANY.address },
+    { label: "통신판매업신고번호", value: COMPANY.mailOrderNumber || "신고 진행 중" },
+    { label: "사업장 주소", value: COMPANY.address },
     {
       label: "고객센터",
       value: <a href={`tel:${COMPANY.phone.replace(/\D/g, "")}`}>{COMPANY.phone}</a>,
@@ -42,9 +43,10 @@ export function Footer() {
     <footer className="site-footer w-full border-t border-grey-200 bg-grey-100 text-[12px] leading-relaxed text-grey-500">
       <div className="mx-auto max-w-[430px] px-5 pt-6 md:max-w-3xl md:px-8 md:pt-8">
         <nav aria-label="약관 및 정책">
-          <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-grey-600">
-            {LEGAL_LINKS.map((l) => (
-              <li key={l.href}>
+          <ul className="flex flex-wrap items-center gap-y-1.5 text-[13px] text-grey-600">
+            {LEGAL_LINKS.map((l, i) => (
+              <li key={l.href} className="flex items-center">
+                {i > 0 && <span aria-hidden className="mx-2.5 text-grey-300">|</span>}
                 <Link href={l.href} className={`hover:underline ${"emphasize" in l && l.emphasize ? "font-semibold text-grey-800" : ""}`}>
                   {l.label}
                 </Link>
@@ -66,9 +68,9 @@ export function Footer() {
         </dl>
 
         <div className="mt-4 space-y-1">
-          <p>목표 금액 미달성 시 모인 금액은 전액 환불됩니다. 펀딩 성공 후 상품 발주가 시작된 이후에는 단순 변심으로 인한 환불이 제한될 수 있습니다.</p>
+          <p>{VOUCHER_ISSUE_NOTICE} {UNDER_GOAL_NOTICE} 선물 교환권은 결제와 동시에 공급이 완료되는 디지털 재화로 단순 변심에 의한 환불이 제한됩니다.</p>
         </div>
-        <p className="mt-4 text-grey-400">© 2026 {COMPANY.brand}. All rights reserved.</p>
+        <p className="mt-4 text-grey-400">Copyright © 2026 {COMPANY.name} ({COMPANY.brand}). All rights reserved.</p>
       </div>
     </footer>
   );

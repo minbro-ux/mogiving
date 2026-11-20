@@ -71,7 +71,7 @@ export async function uploadImage(dataUrl: string): Promise<string | null> {
 const imageKey = (fundingId: string) => `mogiving:image:${fundingId}`;
 
 /**
- * 직접 올린 사진(data URL)은 공유 링크에 담기엔 너무 커서, 펀딩 id로 이 브라우저에 보관해 둔다.
+ * 직접 올린 사진(data URL)은 공유 링크에 담기엔 너무 커서, 공동 선물 id로 이 브라우저에 보관해 둔다.
  * 같은 브라우저에서 공유 링크(친구 시점)를 열 때 다시 꺼내 쓴다.
  */
 export function rememberUploadedImage(fundingId: string, imageUrl: string | undefined) {

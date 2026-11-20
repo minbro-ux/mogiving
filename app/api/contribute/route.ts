@@ -8,11 +8,11 @@ export const dynamic = "force-dynamic";
 
 const bad = (error: string, status = 400) => NextResponse.json({ ok: false, error }, { status });
 
-/* 참여 저장은 결제 승인(/api/payments/confirm)에서만 일어난다. 결제 없이 모금액을 올리는 경로를 두지 않는다 */
+/* 참여 저장은 결제 승인(/api/payments/confirm)에서만 일어난다. 결제 없이 적립 금액을 올리는 경로를 두지 않는다 */
 
 /**
  * GET /api/contribute?share={id}  (헤더 x-share-key: 주최자 비밀 key → 닉네임·메시지 포함)
- * 펀딩 상세 화면이 DB 최신 누적 금액·조각 수·참여 내역으로 동기화할 때 사용
+ * 공동 선물 상세 화면이 DB 최신 누적 금액·조각 수·참여 내역으로 동기화할 때 사용
  */
 export async function GET(req: NextRequest) {
   const shareId = req.nextUrl.searchParams.get("share") ?? "";

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, Lock, Map as MapIcon, MapPin, Plus, Share2, ShieldCheck, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronRight, Clock, Eye, EyeOff, Lock, Map as MapIcon, MapPin, Plus, Share2, ShieldCheck, Smartphone, Sparkles } from "lucide-react";
 import { dDay, percent, shortWon, timeAgo, won } from "@/lib/format";
 import { FEE_PERCENT, feeAmount } from "@/lib/fee";
-import { AUTO_REFUND_DAYS } from "@/lib/policy";
+import { VOUCHER_SEND_BUSINESS_DAYS } from "@/lib/policy";
 import { sumAmount } from "@/lib/mock";
 import { pieceInfo } from "@/lib/pieces";
-import type { Funding, GiftReason, Participant, Resolution, ShippingAddress } from "@/lib/types";
+import type { Funding, FundingGift, FundingVoucher, GiftReason, Participant, ShippingAddress } from "@/lib/types";
+import { GiftVoucherNotice } from "./GiftNotice";
 import { NextWishSheet } from "./ShopScreen";
 import { StakeCardSheet, StakeMapSheet } from "./StakeMap";
 import { Badge, BottomCTA, Button, PieceGrid, ProductThumb, ProgressBar, Segmented, Switch } from "./ui";
@@ -35,7 +36,7 @@ export function FundingScreen({
   onShare: () => void;
   onResolve: () => void;
   onToast: (msg: string) => void;
-  /** 1차 펀딩 완판 후 다음 모금함(2탄) 생성 */
+  /** 1차 선물 완성 후 다음 선물 위시(2탄) 생성 */
   onCreateNext: (f: Funding) => void;
 }) {
   const [showAmounts, setShowAmounts] = useState(true);
@@ -47,11 +48,10 @@ export function FundingScreen({
   const pieces = pieceInfo(funding.goal, raised);
   const isOwner = role === "owner";
   const { phase, product, resolution } = funding;
-  const cancelled = resolution?.kind === "cancel";
-  const hasStakes = funding.participants.length > 0 && !cancelled;
+  const hasStakes = funding.participants.length > 0;
   const canMakeCard = isOwner && phase === "done" && resolution?.kind === "gift";
   const needsChoice = phase === "achieved" || phase === "under";
-  // 목표 100% 달성 후 주인공 시점에만 다음 모금함 열기 유도
+  // 선물 100% 완성 후 주인공 시점에만 다음 선물 위시 만들기 유도
   const showNextRound = isOwner && (phase === "achieved" || resolution?.kind === "gift");
 
   return (
@@ -85,7 +85,7 @@ export function FundingScreen({
         <div className="flex items-center gap-2">
           <PhaseBadge funding={funding} />
           {funding.round > 1 && <Badge tone="grey">{funding.round}탄</Badge>}
-          <span className="text-[13px] text-grey-500">{funding.ownerName}님의 펀딩</span>
+          <span className="text-[13px] text-grey-500">{funding.ownerName}님의 공동 선물</span>
         </div>
         <h1 className="mt-2 text-[24px] font-bold leading-tight text-grey-900">{funding.title}</h1>
 
@@ -129,11 +129,11 @@ export function FundingScreen({
         )}
       </section>
 
-      {/* 모금 현황: 받는 사람은 금액, 친구는 조각 수만 */}
+      {/* 선물 적립 현황: 받는 사람은 금액, 친구는 조각 수만 */}
       <section className="px-5 pt-6">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-[14px] text-grey-600">{isOwner ? "지금까지 모인 금액" : "지금까지 모인 조각"}</p>
+            <p className="text-[14px] text-grey-600">{isOwner ? "선물 적립 금액" : "지금까지 모인 조각"}</p>
             <p className="mt-0.5 text-[28px] font-bold tracking-tight text-grey-900">
               {isOwner ? (
                 won(raised)
@@ -145,7 +145,10 @@ export function FundingScreen({
               )}
             </p>
           </div>
-          <p className={`text-[26px] font-bold ${pct >= 100 ? "text-toss-green" : "text-toss-blue"}`}>{pct}%</p>
+          <p className={`text-right text-[26px] font-bold ${pct >= 100 ? "text-toss-green" : "text-toss-blue"}`}>
+            <span className="block text-[12px] font-medium text-grey-500">선물 완성도</span>
+            {pct}%
+          </p>
         </div>
         <div className="mt-3">
           {isOwner ? (
@@ -159,12 +162,12 @@ export function FundingScreen({
             {funding.participants.length}명 참여 · 1조각 {shortWon(pieces.unit)}
           </span>
           <span>
-            {cancelled ? "취소된 펀딩이에요" : raised < funding.goal ? (isOwner ? `${won(funding.goal - raised)} 남았어요` : `${pieces.remaining}조각 남았어요`) : "목표 달성! 펀딩 마감"}
+            {raised < funding.goal ? (isOwner ? `${won(funding.goal - raised)} 남았어요` : `${pieces.remaining}조각 남았어요`) : "선물 100% 완성!"}
           </span>
         </div>
       </section>
 
-      {/* 상태 카드: 마감/달성/예외 */}
+      {/* 상태 카드: 100% 완성 / 수령 방식 선택 대기 / 수령 완료 */}
       <section className="px-5 pt-6">
         <StatusCard funding={funding} raised={raised} isOwner={isOwner} onResolve={onResolve} />
         {showNextRound && <NextRoundBanner round={funding.round + 1} onClick={() => setNextOpen(true)} />}
@@ -228,11 +231,16 @@ export function FundingScreen({
         </div>
       )}
 
+      {/* 결제 전 꼭 알아야 할 선물 교환권 구매 안내 (상품 상세 하단 고정) */}
+      <section className="px-5 pt-8">
+        <GiftVoucherNotice />
+      </section>
+
       {/* 하단 CTA */}
       <BottomCTA>
         {isOwner ? (
           needsChoice ? (
-            <Button onClick={onResolve}>{phase === "under" ? "전액 결제 취소하기" : "배송지 입력하기"}</Button>
+            <Button onClick={onResolve}>{phase === "under" ? "선물 받을 방법 고르기" : "배송지 입력하기"}</Button>
           ) : canMakeCard ? (
             <Button onClick={() => setCardOpen(true)}>
               <Sparkles size={19} /> 지분 인증 카드 공유하기
@@ -243,9 +251,9 @@ export function FundingScreen({
             </Button>
           )
         ) : phase === "active" ? (
-          <Button onClick={onParticipate}>🧩 조각 선물하기</Button>
+          <Button onClick={onParticipate}>🧩 선물 보태기</Button>
         ) : (
-          <Button disabled>{cancelled ? "취소된 펀딩이에요" : "마감된 펀딩이에요"}</Button>
+          <Button disabled>{phase === "under" ? "선물 기간이 끝났어요" : "완성된 선물이에요"}</Button>
         )}
       </BottomCTA>
 
@@ -287,11 +295,11 @@ function PhaseBadge({ funding: { phase, deadline, resolution } }: { funding: Fun
         <Clock size={12} /> {dDay(deadline)}
       </Badge>
     );
-  if (phase === "achieved") return <Badge tone="green">100% 달성</Badge>;
-  if (phase === "done") return resolution?.kind === "cancel" ? <Badge tone="grey">취소됨</Badge> : <Badge tone="green">완료</Badge>;
+  if (phase === "achieved") return <Badge tone="green">100% 완성</Badge>;
+  if (phase === "done") return resolution?.kind === "voucher" ? <Badge tone="blue">상품권 전환</Badge> : <Badge tone="green">수령 완료</Badge>;
   return (
     <Badge tone="orange">
-      <Clock size={12} /> 마감
+      <Clock size={12} /> 수령 방식 선택 중
     </Badge>
   );
 }
@@ -356,7 +364,7 @@ function AmountSummary({ participants }: { participants: Participant[] }) {
   return (
     <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-grey-50 p-4 text-center">
       {[
-        ["총 후원", won(total)],
+        ["총 적립", won(total)],
         ["평균", won(Math.round(total / amounts.length / 100) * 100)],
         ["최고", won(Math.max(...amounts))],
       ].map(([k, v]) => (
@@ -404,19 +412,19 @@ function StatusCard({ funding, raised, isOwner, onResolve }: { funding: Funding;
   const under = phase === "under";
   return (
     <div className={`rounded-[20px] p-5 ${under ? "bg-toss-orange-light" : "bg-toss-green-light"}`}>
-      <p className="text-[17px] font-bold text-grey-900">{under ? "펀딩이 마감됐어요" : "목표 금액 100% 달성! 🎉"}</p>
+      <p className="text-[17px] font-bold text-grey-900">{under ? "선물 기간이 끝났어요" : "선물이 100% 완성됐어요! 🎉"}</p>
       <p className="mt-1 text-[14px] leading-relaxed text-grey-700">
         {isOwner
           ? under
-            ? `목표까지 ${won(funding.goal - raised)}이 부족해요. 지금 전액 취소할 수 있고, 취소하지 않아도 마감 ${AUTO_REFUND_DAYS}일 후부터 자동으로 전액 환불돼요.`
-            : "펀딩이 마감됐어요. 배송지를 입력해 접수하면 쇼핑몰 주문을 진행해 드려요."
+            ? `친구들이 보낸 선물 교환권 ${won(raised)}은 그대로 적립돼 있어요. 남은 차액 ${won(funding.goal - raised)}을 결제해 실물로 받거나, 적립 금액(원가 기준)만큼 모바일 상품권으로 받을 수 있어요.`
+            : "배송지를 입력해 접수하면 쇼핑몰 주문을 진행해 드려요."
           : under
-            ? `목표 금액에 못 미쳐 참여한 결제는 전액 환불돼요. 늦어도 마감 ${AUTO_REFUND_DAYS}일 후부터 자동으로 처리돼요.`
-            : `펀딩이 마감됐어요. ${funding.ownerName}님이 배송지를 입력하고 있어요.`}
+            ? `보내주신 선물 교환권은 취소되지 않고 ${funding.ownerName}님께 그대로 전달돼요. ${funding.ownerName}님이 차액을 결제해 실물로 받거나 모바일 상품권으로 받아요.`
+            : `${funding.ownerName}님이 배송지를 입력하면 실물 선물이 발송돼요.`}
       </p>
       {isOwner && (
         <Button size="md" className="mt-4" onClick={onResolve}>
-          {under ? "전액 결제 취소하기" : "배송지 입력하기"}
+          {under ? "선물 받을 방법 고르기" : "배송지 입력하기"}
         </Button>
       )}
     </div>
@@ -424,26 +432,13 @@ function StatusCard({ funding, raised, isOwner, onResolve }: { funding: Funding;
 }
 
 const REASON_TEXT: Record<GiftReason, string> = {
-  achieved: "목표 금액 100% 달성",
+  achieved: "친구들의 선물로 100% 완성",
   topup: "부족한 차액을 내가 결제",
 };
 
-function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Resolution; ownerName: string; isOwner: boolean }) {
-  if (r.kind === "cancel") {
-    return (
-      <div className="rounded-[20px] bg-grey-50 p-5">
-        <div className="flex items-center gap-2 text-grey-700">
-          <Ban size={20} />
-          <span className="text-[15px] font-bold">펀딩이 취소됐어요</span>
-        </div>
-        <p className="mt-2 text-[14px] leading-relaxed text-grey-600">
-          {isOwner
-            ? `참여한 ${r.count}명의 결제 ${won(r.amount)}이 모두 승인 취소됐어요. 카드사에 따라 3~5영업일 안에 반영돼요.`
-            : "펀딩이 취소되어 내 결제는 자동으로 승인 취소됐어요."}
-        </p>
-      </div>
-    );
-  }
+function ResolutionCard({ resolution, ownerName, isOwner }: { resolution: FundingGift | FundingVoucher; ownerName: string; isOwner: boolean }) {
+  if (resolution.kind === "voucher") return <VoucherCard voucher={resolution} ownerName={ownerName} isOwner={isOwner} />;
+  const r = resolution;
 
   // 친구 시점: 금액은 숨기고 전달 완료만 안내
   if (!isOwner)
@@ -455,7 +450,7 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
       </div>
     );
 
-  const steps = ["펀딩 완료", "배송 접수", "배송 중", "배송 완료"];
+  const steps = ["선물 완성", "배송 접수", "배송 중", "배송 완료"];
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-grey-200">
@@ -464,7 +459,7 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
           <CheckCircle2 size={28} />
         </div>
         <p className="mt-4 text-[20px] font-bold leading-snug">
-          {r.reason === "achieved" ? "축하해요! 펀딩이 100% 달성됐어요 🎉" : "선물 받을 준비가 끝났어요"}
+          {r.reason === "achieved" ? "축하해요! 선물이 100% 완성됐어요 🎉" : "선물 받을 준비가 끝났어요"}
         </p>
         <p className="mt-1.5 text-[14px] leading-relaxed text-white/85">
           배송 접수가 끝났어요. {r.product.mall}에서 주문을 진행해 드릴게요.
@@ -510,14 +505,14 @@ function ResolutionCard({ resolution: r, ownerName, isOwner }: { resolution: Res
         </div>
 
         <dl className="mt-4 space-y-2 rounded-xl bg-grey-50 p-3.5 text-[13px]">
-          <PayRow k="친구들이 모아준 금액" v={won(r.collected)} />
+          <PayRow k="친구들이 보낸 선물 교환권" v={won(r.collected)} />
           {r.extraPaid ? <PayRow k="내가 결제한 차액" v={won(r.extraPaid)} /> : null}
           <PayRow k="선물 가격" v={won(r.product.price)} />
           <PayRow k={`플랫폼 수수료 ${FEE_PERCENT}%`} v={won(feeAmount(r.product.price))} />
         </dl>
 
         <p className="mt-3 flex items-center justify-center gap-1 text-[12px] text-grey-500">
-          <ShieldCheck size={13} /> 모인 금액은 현금이 아닌 선물 구매와 수수료에만 쓰여요
+          <ShieldCheck size={13} /> 적립된 교환권은 현금이 아닌 지정 선물 구매와 수수료에만 쓰여요
         </p>
       </div>
     </div>
@@ -533,7 +528,7 @@ function PayRow({ k, v }: { k: string; v: string }) {
   );
 }
 
-/** 1순위 선물 완판 후 다음 위시리스트 모금함(2탄) 열기 유도 */
+/** 1순위 선물 완성 후 다음 선물 위시(2탄) 만들기 유도 */
 function NextRoundBanner({ round, onClick }: { round: number; onClick: () => void }) {
   return (
     <button
@@ -545,9 +540,35 @@ function NextRoundBanner({ round, onClick }: { round: number; onClick: () => voi
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] text-white/70">친구들이 아직 더 남아있나요?</span>
-        <span className="mt-0.5 block text-[16px] font-bold">다음 위시리스트 모금함 열기 · {round}탄</span>
+        <span className="mt-0.5 block text-[16px] font-bold">다음 선물 위시 만들기 · {round}탄</span>
       </span>
       <ChevronRight size={20} className="shrink-0 text-white/60" />
     </button>
+  );
+}
+
+/** 모바일 상품권 전환 신청 결과 */
+function VoucherCard({ voucher: v, ownerName, isOwner }: { voucher: FundingVoucher; ownerName: string; isOwner: boolean }) {
+  if (!isOwner)
+    return (
+      <div className="rounded-[20px] bg-toss-blue-light/70 p-5 text-center">
+        <p className="text-4xl">🎁</p>
+        <p className="mt-2 text-[17px] font-bold text-grey-900">모두의 마음이 {ownerName}님께 전달됐어요</p>
+        <p className="mt-1 text-[14px] text-grey-600">적립된 선물 교환권을 모바일 상품권으로 받기로 했어요 · 함께해주셔서 고마워요</p>
+      </div>
+    );
+  return (
+    <div className="rounded-[20px] border border-grey-200 p-5">
+      <div className="flex items-center gap-2 text-toss-blue">
+        <Smartphone size={20} />
+        <span className="text-[16px] font-bold text-grey-900">모바일 상품권 전환을 신청했어요</span>
+      </div>
+      <dl className="mt-3 space-y-2 rounded-xl bg-grey-50 p-3.5 text-[13px]">
+        {v.voucherType && <PayRow k="상품권 종류" v={v.voucherType} />}
+        {v.amount !== undefined && <PayRow k="전환 금액 (원가 기준)" v={won(v.amount)} />}
+        <PayRow k="신청 일시" v={new Date(v.requestedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} />
+      </dl>
+      <p className="mt-3 text-[13px] leading-relaxed text-grey-600">영업일 기준 {VOUCHER_SEND_BUSINESS_DAYS}일 이내 입력하신 휴대폰 번호로 모바일 상품권을 보내드려요.</p>
+    </div>
   );
 }

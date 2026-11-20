@@ -1,23 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin, ShieldCheck, Truck } from "lucide-react";
+import { CreditCard, Gift, MapPin, ShieldCheck, Smartphone, Truck } from "lucide-react";
+import type { FundingVoucherInfo } from "@/lib/contributionStore";
+import { FEE_PERCENT, voucherAmount } from "@/lib/fee";
 import { won } from "@/lib/format";
-import { AUTO_REFUND_DAYS } from "@/lib/policy";
+import { VOUCHER_SEND_BUSINESS_DAYS, VOUCHER_TYPES, type VoucherType } from "@/lib/policy";
 import type { Funding, Product, Resolution, ShippingAddress } from "@/lib/types";
 import { PostcodeFields, cleanZonecode } from "./AddressSearch";
 import { BottomSheet, Button, ProductThumb, Spinner } from "./ui";
 
-type Step = "cancel" | "address" | "processing";
+type Step = "choice" | "voucher" | "address" | "processing";
 
 const EMPTY_ADDRESS: ShippingAddress = { name: "", phone: "", address: "", detail: "" };
 
 type ActionResult<T> = ({ ok: true } & T) | { ok: false; message: string };
 
 /**
- * 펀딩 결과 처리 모달 (현금 송금·포인트·교환권 없음)
- * - 달성(achieved): 배송지 입력 → 서버에 배송 접수 → 운영자가 원래 쇼핑몰 상품을 발주
- * - 미달(under):    전액 승인 취소. 처리하지 않아도 마감 후 일정 기간이 지나면 자동으로 전액 환불된다
+ * 수령인의 선물 수령 모달
+ * - 100% 완성(achieved = COMPLETED_FULL): 배송지 입력 → 서버에 배송 접수 → 운영자가 원래 쇼핑몰 상품을 발주
+ * - 기간 종료·미도달(under = PENDING_CHOICE): 결제는 취소되지 않고 수령 방식을 고른다
+ *     A. 차액 결제하고 실물 받기 → 결제 완료 시 COMPLETED_FULL → 배송지 입력
+ *     B. 모바일 상품권으로 받기 → 적립 금액에서 수수료를 뺀 원가 상당액으로 전환 신청 (CONVERTED_VOUCHER)
  */
 export function ResolutionSheet({
   open,
@@ -25,7 +29,8 @@ export function ResolutionSheet({
   raised,
   onClose,
   onResolve,
-  onCancelFunding,
+  onTopup,
+  onRequestVoucher,
   onRequestDelivery,
 }: {
   open: boolean;
@@ -33,18 +38,25 @@ export function ResolutionSheet({
   raised: number;
   onClose: () => void;
   onResolve: (r: Resolution) => void;
-  /** 토스 결제를 실제로 전액 취소한다 */
-  onCancelFunding: () => Promise<ActionResult<{ amount: number; count: number }>>;
+  /** 남은 차액 결제창을 연다. 결제 완료 화면은 결제창에서 돌아온 /pay/success가 보여준다 */
+  onTopup: () => Promise<{ status: "redirecting" | "canceled" } | { status: "error"; message: string }>;
+  /** 모바일 상품권 전환을 서버에 신청한다 */
+  onRequestVoucher: (input: { voucherType: VoucherType; name: string; phone: string }) => Promise<ActionResult<{ voucher: FundingVoucherInfo }>>;
   /** 배송 접수를 서버에 저장한다. 돌려준 address가 실제로 접수된 배송지다 */
   onRequestDelivery: (address: ShippingAddress) => Promise<ActionResult<{ address: ShippingAddress }>>;
 }) {
   const { goal, product } = funding;
-  const firstStep: Step = funding.phase === "achieved" ? "address" : "cancel";
+  const firstStep: Step = funding.phase === "achieved" ? "address" : "choice";
+  const remaining = Math.max(0, goal - raised);
+  const voucherValue = voucherAmount(raised);
+  const extraPaid = funding.participants.filter((p) => p.nickname === "차액 결제").reduce((s, p) => s + p.amount, 0);
 
   const [step, setStep] = useState<Step>(firstStep);
-  // 펀딩 등록 때 입력한 배송지가 있으면 미리 채워 둔다
+  // 선물 등록 때 입력한 배송지가 있으면 미리 채워 둔다
   const initialAddress = funding.shipping ?? EMPTY_ADDRESS;
   const [address, setAddress] = useState<ShippingAddress>(initialAddress);
+  const [voucherType, setVoucherType] = useState<VoucherType>(VOUCHER_TYPES[0]);
+  const [contact, setContact] = useState({ name: initialAddress.name, phone: initialAddress.phone });
   const [processingText, setProcessingText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -52,20 +64,40 @@ export function ResolutionSheet({
     if (!open) return;
     setStep(firstStep);
     setAddress(initialAddress);
+    setContact({ name: initialAddress.name, phone: initialAddress.phone });
     setError(null);
   }, [open, firstStep, initialAddress]);
 
-  const cancelFunding = async () => {
+  // 결제창에서 브라우저 '뒤로'로 돌아오면 멈춘 화면이 복원될 수 있어 선택 화면으로 되돌린다
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setStep(firstStep);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [firstStep]);
+
+  const payTopup = async () => {
     setError(null);
-    setProcessingText("결제를 전액 취소하고 있어요");
+    setProcessingText("차액 결제창을 열고 있어요");
     setStep("processing");
-    const r = await onCancelFunding();
+    const r = await onTopup();
+    if (r.status === "redirecting") return;
+    if (r.status === "error") setError(r.message);
+    setStep("choice");
+  };
+
+  const submitVoucher = async () => {
+    setError(null);
+    setProcessingText("모바일 상품권 전환을 신청하고 있어요");
+    setStep("processing");
+    const r = await onRequestVoucher({ voucherType, name: contact.name.trim(), phone: contact.phone.trim() });
     if (r.ok) {
-      onResolve({ kind: "cancel", amount: r.amount, count: r.count });
+      onResolve({ kind: "voucher", requestedAt: r.voucher.requestedAt, amount: r.voucher.amount ?? voucherValue, voucherType: r.voucher.type ?? voucherType });
       return;
     }
     setError(r.message);
-    setStep("cancel");
+    setStep("voucher");
   };
 
   const requestDelivery = async () => {
@@ -77,7 +109,7 @@ export function ResolutionSheet({
     const z = cleanZonecode(zonecode);
     const r = await onRequestDelivery(z ? { ...rest, zonecode: z } : rest);
     if (r.ok) {
-      onResolve({ kind: "gift", product, reason: "achieved", address: r.address, collected: raised });
+      onResolve({ kind: "gift", product, reason: extraPaid > 0 ? "topup" : "achieved", address: r.address, collected: raised - extraPaid, ...(extraPaid ? { extraPaid } : {}) });
       return;
     }
     setError(r.message);
@@ -100,46 +132,117 @@ export function ResolutionSheet({
       </BottomSheet>
     );
 
-  /* ----------------------------- 미달: 전액 승인 취소 ----------------------------- */
-  if (step === "cancel")
+  /* ----------------------- 기간 종료·미도달: 수령 방식 선택 ----------------------- */
+  if (step === "choice")
     return (
       <BottomSheet
         open={open}
         onClose={onClose}
-        title="목표 금액에 못 미쳤어요"
+        title="선물 받을 방법을 골라주세요"
         description={
           <>
-            모인 금액 <b className="text-grey-900">{won(raised)}</b> · 부족한 금액 <b className="text-toss-red">{won(Math.max(0, goal - raised))}</b>
+            선물 적립 금액 <b className="text-grey-900">{won(raised)}</b> · 남은 차액 <b className="text-toss-blue">{won(remaining)}</b>
           </>
-        }
-        footer={
-          <Button variant="danger" onClick={cancelFunding}>
-            전액 결제 취소하기
-          </Button>
         }
       >
         {errorBox}
-        <ul className="mt-4 space-y-3 rounded-2xl bg-grey-50 p-4 text-[14px] leading-relaxed text-grey-700">
-          <li>
-            • 참여한 친구 {funding.participants.length}명의 결제 <b className="text-grey-900">{won(raised)}</b>이 모두 <b className="text-grey-900">자동 승인 취소</b>돼요.
-          </li>
-          <li>• 수수료까지 포함해 친구들이 결제한 금액 그대로 100% 환불돼요.</li>
-          <li>• 지금 취소하지 않아도 마감 {AUTO_REFUND_DAYS}일 후부터 자동으로 전액 환불돼요.</li>
-          <li>• 카드·토스페이 결제는 카드사에 따라 3~5영업일 안에 취소가 반영돼요.</li>
-          <li>• 친구들이 남긴 롤링페이퍼는 그대로 남아요.</li>
-        </ul>
-        <p className="pb-2 pt-3 text-[13px] text-grey-500">친구들에게는 &lsquo;펀딩이 취소되어 결제가 자동 취소됐어요&rsquo;로만 안내돼요.</p>
+        <ProductRow product={product} />
+        <p className="mt-4 rounded-xl bg-grey-50 px-4 py-3 text-[13px] leading-relaxed text-grey-600">
+          친구들이 보낸 선물 교환권은 이미 구매 확정되어 취소되지 않아요. 아래 두 가지 중 원하는 방법으로 받아요.
+        </p>
+
+        <ChoiceCard
+          icon={<CreditCard size={20} />}
+          title="A. 차액 결제하고 실물 받기"
+          body={
+            <>
+              남은 차액 <b className="text-grey-900">{won(remaining)}</b>을 결제하면 선물이 100% 완성되고, 배송지를 입력하면 {product.mall || "쇼핑몰"}에서 실물로 보내드려요.
+            </>
+          }
+          action={<Button onClick={payTopup}>{won(remaining)} 결제하고 실물 받기</Button>}
+        />
+        <ChoiceCard
+          icon={<Smartphone size={20} />}
+          title="B. 모바일 상품권으로 받기"
+          body={
+            raised > 0 ? (
+              <>
+                적립 금액 {won(raised)}에서 플랫폼 수수료({FEE_PERCENT}%)를 뺀 원가 기준 <b className="text-grey-900">{won(voucherValue)}</b>을 모바일 상품권으로 받아요.
+              </>
+            ) : (
+              <>아직 적립된 금액이 없어 모바일 상품권으로 받을 수 없어요.</>
+            )
+          }
+          action={
+            <Button variant="secondary" disabled={raised <= 0} onClick={() => setStep("voucher")}>
+              모바일 상품권으로 받기
+            </Button>
+          }
+        />
+        <NoCashNote />
       </BottomSheet>
     );
 
-  /* ------------------------------ 달성: 배송지 입력 ------------------------------ */
+  /* --------------------------- B. 모바일 상품권 전환 신청 --------------------------- */
+  if (step === "voucher") {
+    const validContact = contact.name.trim() && /^[0-9-]{9,20}$/.test(contact.phone.trim());
+    return (
+      <BottomSheet
+        open={open}
+        onClose={onClose}
+        title="모바일 상품권으로 받기"
+        description={
+          <>
+            전환 금액 <b className="text-grey-900">{won(voucherValue)}</b> (적립 {won(raised)} − 수수료 {FEE_PERCENT}%)
+          </>
+        }
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" full={false} className="!w-28" onClick={() => setStep("choice")}>
+              이전
+            </Button>
+            <Button disabled={!validContact} onClick={submitVoucher}>
+              {won(voucherValue)} 상품권 신청하기
+            </Button>
+          </div>
+        }
+      >
+        {errorBox}
+        <p className="mt-5 text-[14px] font-semibold text-grey-600">상품권 종류</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {VOUCHER_TYPES.map((t) => (
+            <button
+              key={t}
+              onClick={() => setVoucherType(t)}
+              className={`rounded-xl px-3 py-3 text-[14px] font-semibold ${voucherType === t ? "bg-toss-blue text-white" : "bg-grey-100 text-grey-700 active:bg-grey-200"}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <p className="mt-5 text-[14px] font-semibold text-grey-600">받는 분</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <AddressInput value={contact.name} maxLength={20} onChange={(v) => setContact({ ...contact, name: v })} placeholder="이름" />
+          <AddressInput value={contact.phone} maxLength={20} onChange={(v) => setContact({ ...contact, phone: v })} placeholder="휴대폰 번호" inputMode="tel" />
+        </div>
+        <ul className="mt-4 space-y-1.5 rounded-2xl bg-grey-50 p-4 text-[13px] leading-relaxed text-grey-600">
+          <li>• 신청 후 영업일 기준 {VOUCHER_SEND_BUSINESS_DAYS}일 이내 입력한 번호로 모바일 상품권을 보내드려요.</li>
+          <li>• 신청하면 차액 결제(실물 받기)로 바꿀 수 없어요.</li>
+          <li>• 상품권은 현금으로 돌려드리지 않아요.</li>
+        </ul>
+        <div className="pb-2" />
+      </BottomSheet>
+    );
+  }
+
+  /* ------------------------------ 100% 완성: 배송지 입력 ------------------------------ */
   const valid = address.name.trim() && address.phone.trim() && address.address.trim();
 
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
-      title="축하해요! 100% 달성했어요 🎉"
+      title="축하해요! 선물이 100% 완성됐어요 🎉"
       description="배송지를 입력해 접수하면 쇼핑몰 주문을 진행해 드려요."
       footer={
         <Button disabled={!valid} onClick={requestDelivery}>
@@ -171,10 +274,23 @@ export function ResolutionSheet({
   );
 }
 
+function ChoiceCard({ icon, title, body, action }: { icon: React.ReactNode; title: string; body: React.ReactNode; action: React.ReactNode }) {
+  return (
+    <div className="mt-3 rounded-2xl border border-grey-200 p-4">
+      <p className="flex items-center gap-2 text-[16px] font-bold text-grey-900">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-toss-blue-light text-toss-blue">{icon}</span>
+        {title}
+      </p>
+      <p className="mt-2 text-[14px] leading-relaxed text-grey-600">{body}</p>
+      <div className="mt-3">{action}</div>
+    </div>
+  );
+}
+
 function NoCashNote() {
   return (
     <p className="flex items-center gap-1 pb-2 pt-4 text-[12px] text-grey-500">
-      <ShieldCheck size={13} className="shrink-0" /> 모인 금액은 현금으로 지급되지 않고 선물 구매와 수수료에만 쓰여요
+      <ShieldCheck size={13} className="shrink-0" /> 적립된 선물 교환권은 현금으로 지급되지 않고 지정 선물 또는 모바일 상품권으로만 받아요
     </p>
   );
 }
@@ -185,7 +301,8 @@ function ProductRow({ product }: { product: Product }) {
       <ProductThumb product={product} size="sm" />
       <div className="min-w-0">
         <p className="line-clamp-1 text-[15px] text-grey-800">{product.name}</p>
-        <p className="text-[13px] text-grey-500">
+        <p className="flex items-center gap-1 text-[13px] text-grey-500">
+          <Gift size={12} />
           {product.mall} · {won(product.price)}
           {product.option && ` · 옵션 ${product.option}`}
         </p>
