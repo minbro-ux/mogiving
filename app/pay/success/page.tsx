@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, Check } from "lucide-react";
+import { GiftVoucherTicket } from "@/components/GiftVoucher";
 import { Spinner } from "@/components/ui";
+import { voucherNumber } from "@/lib/giftVoucher";
 import { COMPANY } from "@/lib/company";
 import { rememberMyContribution } from "@/lib/contribute";
 import { won } from "@/lib/format";
@@ -20,7 +22,7 @@ const FAIL_TEXT: Record<string, string> = {
   order_failed: "이미 실패 처리된 결제예요. 처음부터 다시 시도해 주세요.",
 };
 
-function Result({ tone, title, children, shareId }: { tone: "ok" | "warn"; title: string; children: React.ReactNode; shareId?: string }) {
+function Result({ tone, title, children, shareId, ticket }: { tone: "ok" | "warn"; title: string; children: React.ReactNode; shareId?: string; ticket?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center px-5 py-16 text-center">
       <div className={`flex h-16 w-16 items-center justify-center rounded-full text-white ${tone === "ok" ? "animate-pop bg-toss-blue" : "bg-toss-orange"}`}>
@@ -28,6 +30,7 @@ function Result({ tone, title, children, shareId }: { tone: "ok" | "warn"; title
       </div>
       <h1 className="mt-6 text-[22px] font-bold text-grey-900">{title}</h1>
       <div className="mt-2 text-[15px] leading-relaxed text-grey-600">{children}</div>
+      {ticket && <div className="mt-7 w-full">{ticket}</div>}
       <a href={shareId ? `/f/${encodeURIComponent(shareId)}` : "/"} className="mt-8 flex h-14 w-full items-center justify-center rounded-2xl bg-toss-blue text-[17px] font-bold text-white">
         {shareId ? "선물로 돌아가기" : "처음으로"}
       </a>
@@ -104,16 +107,27 @@ function PaySuccess() {
         교환권이 발행되지 않아 결제한 {won(refundAmount)}은 자동으로 취소됐어요. 카드사에 따라 3~5영업일 안에 반영돼요.
       </Result>
     );
+  const ticket = (
+    <GiftVoucherTicket
+      voucherNo={voucherNumber(result.contribution?.id ?? orderId)}
+      amount={recordedAmount}
+      productName={result.productName}
+      recipientName={result.recipientName}
+      issuedAt={result.contribution?.createdAt ?? Date.now()}
+      kindLabel={kind === "topup" ? "모기빙 전용 선물 교환권 (차액)" : "모기빙 전용 선물 교환권"}
+    />
+  );
   if (kind === "topup")
     return (
-      <Result tone="ok" title="선물이 100% 완성됐어요" shareId={shareId}>
-        <p>차액 {won(recordedAmount)} 결제가 완료됐어요.</p>
+      <Result tone="ok" title="선물 교환권 지급 완료" shareId={shareId} ticket={ticket}>
+        <p className="font-semibold text-grey-900">차액 {won(recordedAmount)}의 선물 교환권이 즉시 발급되어 지급되었고, 선물이 100% 완성됐어요.</p>
         <p className="mt-2">선물 화면에서 배송지를 입력하면 실물 상품을 보내드려요.</p>
       </Result>
     );
   return (
-    <Result tone="ok" title="선물 교환권을 선물했어요" shareId={shareId}>
-      <p>{won(recordedAmount)} 선물 교환권이 발행(구매 확정)되어 받는 분에게 적립되고 축하 메시지가 전달됐어요.</p>
+    <Result tone="ok" title="선물 교환권 지급 완료" shareId={shareId} ticket={ticket}>
+      <p className="font-semibold text-grey-900">선물 교환권이 즉시 발급되어 수령인에게 지급되었습니다.</p>
+      <p className="mt-1.5">결제와 동시에 구매가 확정되었고, 축하 메시지도 함께 전달됐어요.</p>
       {refundAmount > 0 && <p className="mt-2">선물 총액을 넘은 {won(refundAmount)}은 교환권이 발행되지 않아 자동으로 취소됐어요.</p>}
       <p className="mt-2 text-[13px] text-grey-500">결제 금액과 메시지는 받는 분에게만 보여요.</p>
     </Result>

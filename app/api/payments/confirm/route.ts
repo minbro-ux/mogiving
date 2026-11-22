@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { type FinalizeResult, type PaymentOrder, PaymentStoreError, finalizePayment, fundingAvailability, getPaymentOrder, markOrderApproved, markOrderFailed, setRefundStatus } from "@/lib/paymentStore";
 import { alertGiftCompleted } from "@/lib/opsAlerts";
+import { getShare } from "@/lib/shareStore";
 import { cancelTossPayment, confirmTossPayment, getTossPayment } from "@/lib/tossServer";
 
 export const runtime = "nodejs";
@@ -24,7 +25,9 @@ async function settleRefund(order: PaymentOrder, paymentKey: string, r: Finalize
   return { ...r, refundStatus };
 }
 
-function respond(order: PaymentOrder, r: FinalizeResult) {
+async function respond(order: PaymentOrder, r: FinalizeResult) {
+  // 결제 완료 화면의 선물 교환권 카드에 대상 상품·수령인을 표시한다 (조회에 실패해도 결제 결과는 그대로 돌려준다)
+  const share = await getShare(r.shareId);
   return NextResponse.json({
     ok: true,
     shareId: r.shareId,
@@ -36,6 +39,8 @@ function respond(order: PaymentOrder, r: FinalizeResult) {
     goal: r.goal,
     collected: r.collected,
     count: r.count,
+    productName: share?.p.name ?? null,
+    recipientName: share?.o ?? null,
     // 결제한 본인에게만 돌려주는 값 (이 기기에 기억해 두었다가 내 메시지로 보여준다)
     contribution: r.contributionId ? { id: r.contributionId, nickname: order.nickname, message: order.message, amount: r.recordedAmount, createdAt: r.contributedAt ?? Date.now() } : null,
   });

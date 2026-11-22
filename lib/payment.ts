@@ -87,6 +87,9 @@ export type ConfirmOk = {
   goal: number | null;
   collected: number;
   count: number;
+  /** 선물 교환권의 대상 상품명·수령인 이름 (조회 실패 시 null) */
+  productName: string | null;
+  recipientName: string | null;
   contribution: StoredContribution | null;
 };
 export type ConfirmFail = { ok: false; error?: string; shareId?: string; charged?: boolean; retryable: boolean };

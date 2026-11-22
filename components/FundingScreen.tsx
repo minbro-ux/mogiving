@@ -9,6 +9,7 @@ import { sumAmount } from "@/lib/mock";
 import { pieceInfo } from "@/lib/pieces";
 import type { Funding, FundingGift, FundingVoucher, GiftReason, Participant, ShippingAddress } from "@/lib/types";
 import { GiftVoucherNotice } from "./GiftNotice";
+import { VoucherLedger } from "./GiftVoucher";
 import { NextWishSheet } from "./ShopScreen";
 import { StakeCardSheet, StakeMapSheet } from "./StakeMap";
 import { Badge, BottomCTA, Button, PieceGrid, ProductThumb, ProgressBar, Segmented, Switch } from "./ui";
@@ -165,6 +166,7 @@ export function FundingScreen({
             {raised < funding.goal ? (isOwner ? `${won(funding.goal - raised)} 남았어요` : `${pieces.remaining}조각 남았어요`) : "선물 100% 완성!"}
           </span>
         </div>
+        <VoucherLedger participants={funding.participants} isOwner={isOwner} />
       </section>
 
       {/* 상태 카드: 100% 완성 / 수령 방식 선택 대기 / 수령 완료 */}
@@ -321,7 +323,12 @@ function FeedItem({ p, showAmount }: { p: Participant; showAmount: boolean }) {
         </div>
         <p className="mt-1 text-[15px] leading-relaxed text-grey-700">{p.message}</p>
       </div>
-      {showAmount && <span className="shrink-0 pt-0.5 text-[15px] font-bold text-toss-blue">+{won(p.amount)}</span>}
+      {showAmount && (
+        <span className="shrink-0 pt-0.5 text-right">
+          <span className="block text-[15px] font-bold text-toss-blue">{won(p.amount)}</span>
+          <span className="block text-[11px] font-semibold text-toss-green">교환권 지급 완료</span>
+        </span>
+      )}
     </li>
   );
 }
@@ -364,7 +371,7 @@ function AmountSummary({ participants }: { participants: Participant[] }) {
   return (
     <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-grey-50 p-4 text-center">
       {[
-        ["총 적립", won(total)],
+        ["총 지급", won(total)],
         ["평균", won(Math.round(total / amounts.length / 100) * 100)],
         ["최고", won(Math.max(...amounts))],
       ].map(([k, v]) => (

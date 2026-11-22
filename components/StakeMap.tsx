@@ -6,6 +6,7 @@ import { won } from "@/lib/format";
 import { sumAmount } from "@/lib/mock";
 import { pieceInfo } from "@/lib/pieces";
 import type { Funding, Product } from "@/lib/types";
+import { PaidBadge } from "./GiftVoucher";
 import { Badge, BottomSheet, Button, ProductThumb, Switch } from "./ui";
 
 const STAKE_COLORS = ["#0064FF", "#F04452", "#03B26C", "#FE9800", "#8B5CF6", "#06B6D4", "#EC4899", "#65A30D"];
@@ -332,6 +333,17 @@ export function StakeCardSheet({
           </ul>
           {stakes.length > top.length && <p className="mt-1.5 text-[12px] text-grey-500">외 {stakes.length - top.length}명</p>}
 
+          {/* 발급된 선물 교환권 내역: 금액은 '비율·금액 표시' 스위치를 따른다 (SNS 공유용 카드) */}
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-toss-blue-light/60 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-toss-blue">발급된 선물 교환권 내역</p>
+              <p className="text-[13px] font-bold text-grey-900">
+                {funding.participants.length}장 · {showPct ? `총 ${won(sumAmount(funding.participants))} 지급 완료` : "모두 지급 완료"}
+              </p>
+            </div>
+            <PaidBadge />
+          </div>
+
           <div className="mt-3 flex items-center justify-between border-t border-dashed border-grey-200 pt-3 text-[11px] text-grey-500">
             <span>{funding.ownerName}님의 선물 · {new Date().toLocaleDateString("ko-KR")}</span>
             <span>#모기빙 #선물인증</span>
@@ -340,7 +352,7 @@ export function StakeCardSheet({
       </div>
 
       <label className="mt-4 flex items-center justify-between rounded-2xl bg-grey-50 px-4 py-3 text-[14px] font-medium text-grey-700">
-        조각 비율(%) 표시하기
+        조각 비율·교환권 금액 표시하기
         <Switch checked={showPct} onChange={setShowPct} />
       </label>
 
