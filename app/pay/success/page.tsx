@@ -114,7 +114,7 @@ function PaySuccess() {
   return (
     <Result tone="ok" title="선물 교환권을 선물했어요" shareId={shareId}>
       <p>{won(recordedAmount)} 선물 교환권이 발행(구매 확정)되어 받는 분에게 적립되고 축하 메시지가 전달됐어요.</p>
-      {refundAmount > 0 && <p className="mt-2">목표 금액을 넘은 {won(refundAmount)}은 교환권이 발행되지 않아 자동으로 취소됐어요.</p>}
+      {refundAmount > 0 && <p className="mt-2">선물 총액을 넘은 {won(refundAmount)}은 교환권이 발행되지 않아 자동으로 취소됐어요.</p>}
       <p className="mt-2 text-[13px] text-grey-500">결제 금액과 메시지는 받는 분에게만 보여요.</p>
     </Result>
   );

@@ -2,9 +2,9 @@
 export type FundingPurpose = "general" | "birthday" | "housewarming" | "anniversary" | "graduation";
 
 export const FUNDING_PURPOSES: { id: FundingPurpose; label: string; title: string; message: string }[] = [
-  { id: "general", label: "일반 선물", title: "내가 갖고 싶은 공동 선물", message: "평소 정말 갖고 싶던 선물이에요! 마음 모아주시면 감사히 받을게요 🙏" },
-  { id: "birthday", label: "생일", title: "내 생일 공동 선물", message: "올해 생일엔 이 선물이 정말 갖고 싶어요! 마음 모아주시면 감사히 받을게요 🙏" },
-  { id: "housewarming", label: "집들이", title: "우리 집 집들이 공동 선물", message: "새 보금자리에 꼭 필요한 선물이에요! 마음 모아주시면 예쁘게 잘 쓸게요 🏠" },
+  { id: "general", label: "일반 선물", title: "내가 갖고 싶은 공동 선물", message: "평소 정말 갖고 싶던 선물이에요! 함께 선물해 주시면 감사히 받을게요 🙏" },
+  { id: "birthday", label: "생일", title: "내 생일 공동 선물", message: "올해 생일엔 이 선물이 정말 갖고 싶어요! 함께 선물해 주시면 감사히 받을게요 🙏" },
+  { id: "housewarming", label: "집들이", title: "우리 집 집들이 공동 선물", message: "새 보금자리에 꼭 필요한 선물이에요! 함께 선물해 주시면 예쁘게 잘 쓸게요 🏠" },
   { id: "anniversary", label: "결혼·기념일", title: "특별한 기념일 공동 선물", message: "소중한 날을 함께 축하해 주세요! 보내주신 마음 오래오래 간직할게요 💐" },
   { id: "graduation", label: "졸업·취업", title: "새로운 시작 응원 공동 선물", message: "새로운 출발을 앞두고 꼭 갖고 싶던 선물이에요! 응원해 주셔서 감사합니다 🎓" },
 ];

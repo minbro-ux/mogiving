@@ -102,7 +102,7 @@ export function FundingScreen({
               </p>
             )}
             <p className="mt-1.5 text-[13px] text-grey-500">
-              목표 금액 <b className="text-[15px] text-grey-900">{won(funding.goal)}</b>
+              선물 총액 <b className="text-[15px] text-grey-900">{won(funding.goal)}</b>
             </p>
           </div>
         </div>
@@ -119,7 +119,7 @@ export function FundingScreen({
               <MapIcon size={18} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-semibold text-grey-900">지분 지도 보기</span>
+              <span className="block text-[15px] font-semibold text-grey-900">선물 조각 지도 보기</span>
               <span className="block text-[12px] text-grey-500">
                 {isOwner ? "누가 선물의 어느 부분을 채웠는지 확인해요" : "선물 위에서 내 자리를 확인해요"}
               </span>
@@ -133,7 +133,7 @@ export function FundingScreen({
       <section className="px-5 pt-6">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-[14px] text-grey-600">{isOwner ? "선물 적립 금액" : "지금까지 모인 조각"}</p>
+            <p className="text-[14px] text-grey-600">{isOwner ? "선물 적립 금액" : "지금까지 채워진 조각"}</p>
             <p className="mt-0.5 text-[28px] font-bold tracking-tight text-grey-900">
               {isOwner ? (
                 won(raised)
@@ -243,7 +243,7 @@ export function FundingScreen({
             <Button onClick={onResolve}>{phase === "under" ? "선물 받을 방법 고르기" : "배송지 입력하기"}</Button>
           ) : canMakeCard ? (
             <Button onClick={() => setCardOpen(true)}>
-              <Sparkles size={19} /> 지분 인증 카드 공유하기
+              <Sparkles size={19} /> 선물 인증 카드 공유하기
             </Button>
           ) : (
             <Button onClick={onShare} variant={phase === "done" ? "secondary" : "primary"}>

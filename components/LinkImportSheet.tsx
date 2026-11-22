@@ -154,7 +154,7 @@ export function LinkImportSheet({
         />
       </FormField>
 
-      <FormField label="선물 금액" hint={<span className="text-[12px] text-grey-500">목표 금액 = 선물 금액 + 수수료 {FEE_PERCENT}%</span>}>
+      <FormField label="선물 금액" hint={<span className="text-[12px] text-grey-500">선물 총액 = 선물 금액 + 수수료 {FEE_PERCENT}%</span>}>
         <PriceInput value={draft.price} onChange={(price) => set({ price })} />
         <PriceAccuracyNotice />
         <FeeSummary basePrice={draft.price} />

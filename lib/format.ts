@@ -10,9 +10,6 @@ export function shortWon(n: number) {
 export const percent = (raised: number, goal: number) =>
   goal <= 0 ? 0 : Math.floor((raised / goal) * 100);
 
-export const discountRate = (price: number, original?: number) =>
-  original && original > price ? Math.round((1 - price / original) * 100) : 0;
-
 export function dDay(deadline: number, now = Date.now()) {
   const diff = deadline - now;
   if (diff <= 0) return "마감";

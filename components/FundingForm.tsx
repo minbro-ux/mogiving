@@ -103,12 +103,12 @@ export function FeeSummary({ basePrice }: { basePrice: number }) {
           <dd className="font-semibold text-grey-900">+ {won(feeAmount(basePrice))}</dd>
         </div>
         <div className="flex items-baseline justify-between border-t border-grey-200 pt-2">
-          <dt className="font-bold text-grey-900">최종 목표 금액</dt>
+          <dt className="font-bold text-grey-900">선물 총액</dt>
           <dd className="text-[18px] font-bold text-toss-blue">{won(goalWithFee(basePrice))}</dd>
         </div>
       </dl>
       <p className="mt-2.5 text-[12px] leading-relaxed text-grey-600">선물 결제 시 부족함이 없도록 결제 및 운영 수수료 {FEE_PERCENT}%가 포함된 금액으로 공동 선물이 만들어집니다.</p>
-      <p className="mt-1 text-[12px] text-grey-500">최종 목표 금액은 100원 단위로 올림돼요.</p>
+      <p className="mt-1 text-[12px] text-grey-500">선물 총액은 100원 단위로 올림돼요.</p>
     </div>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ChevronLeft, ChevronRight, Gift, Link2, PackageCheck, Search, Sparkles, Star } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Gift, Link2, PackageCheck, Search, Sparkles } from "lucide-react";
 import { CATEGORIES, PRODUCTS, createFunding } from "@/lib/mock";
 import { firstAvailableOption } from "@/lib/options";
 import { type ParsedLink, linkKey, parseLinkInput } from "@/lib/crawl";
-import { discountRate, won } from "@/lib/format";
+import { won } from "@/lib/format";
 import type { Funding, Product } from "@/lib/types";
 import { EMPTY_SHIPPING, FeeSummary, OptionField, OwnerNameField, PeriodPicker, PurposeFields, optionReady, SafetyNote, ShippingFields, purposeDraft, purposeText, shippingStatus, toShipping } from "./FundingForm";
 import { LinkImportSheet } from "./LinkImportSheet";
@@ -69,7 +69,7 @@ export function ShopScreen({ onCreate, onBack, onToast }: { onCreate: (f: Fundin
         <ol className="grid grid-cols-3 gap-2 text-center">
           {[
             { icon: <Link2 size={18} />, t: "선물 등록" },
-            { icon: <Gift size={18} />, t: "친구들과 모으기" },
+            { icon: <Gift size={18} />, t: "친구들과 함께 선물하기" },
             { icon: <PackageCheck size={18} />, t: "100% 완성 시 실물 배송" },
           ].map((s, i) => (
             <li key={s.t} className="rounded-2xl bg-grey-50 px-2 py-3">
@@ -300,7 +300,6 @@ export function NextWishSheet({
 /* ------------------------- 추천 상품 카드 & 바텀시트 ------------------------- */
 
 function ProductCard({ product: p, onClick }: { product: Product; onClick: () => void }) {
-  const rate = discountRate(p.price, p.originalPrice);
   return (
     <button onClick={onClick} className="text-left transition active:scale-[0.98]">
       <div className="relative">
@@ -309,16 +308,7 @@ function ProductCard({ product: p, onClick }: { product: Product; onClick: () =>
       </div>
       <p className="mt-2.5 text-[13px] font-medium text-grey-500">{p.brand}</p>
       <p className="mt-0.5 line-clamp-2 text-[14px] leading-snug text-grey-800">{p.name}</p>
-      <p className="mt-1 text-[16px] font-bold text-grey-900">
-        {rate > 0 && <span className="mr-1 text-toss-red">{rate}%</span>}
-        {won(p.price)}
-      </p>
-      {p.rating && (
-        <p className="mt-1 flex items-center gap-0.5 text-[12px] text-grey-500">
-          <Star size={12} className="fill-[#FFC342] text-[#FFC342]" />
-          {p.rating} ({p.reviews?.toLocaleString()})
-        </p>
-      )}
+      <p className="mt-1 text-[16px] font-bold text-grey-900">{won(p.price)}</p>
     </button>
   );
 }
@@ -331,7 +321,6 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
   const [shipping, setShipping] = useState(EMPTY_SHIPPING);
   const [purpose, setPurpose] = useState(() => purposeDraft());
   if (!p) return null;
-  const rate = discountRate(p.price, p.originalPrice);
   return (
     <BottomSheet
       open
@@ -354,11 +343,7 @@ function CuratedSheet({ product: p, onClose, onCreate }: { product: Product | nu
       </div>
       <p className="mt-2.5 text-[14px] font-medium text-grey-500">{p.brand}</p>
       <p className="mt-0.5 text-[20px] font-bold leading-snug text-grey-900">{p.name}</p>
-      <div className="mt-2 flex items-baseline gap-2">
-        {rate > 0 && <span className="text-[22px] font-bold text-toss-red">{rate}%</span>}
-        <span className="text-[22px] font-bold text-grey-900">{won(p.price)}</span>
-        {p.originalPrice && <span className="text-[15px] text-grey-400 line-through">{won(p.originalPrice)}</span>}
-      </div>
+      <p className="mt-2 text-[22px] font-bold text-grey-900">{won(p.price)}</p>
       <FeeSummary basePrice={p.price} />
       <PurposeFields value={purpose} onChange={setPurpose} />
       <OwnerNameField value={ownerName} onChange={setOwnerName} />

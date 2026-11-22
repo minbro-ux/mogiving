@@ -34,7 +34,7 @@ export function WishRequestSheet({ open, onClose, onCopied }: { open: boolean; o
   const o = OCCASIONS.find((x) => x.label === occasion) ?? OCCASIONS[0];
   const link = new URL(`/r/${code}`, linkOrigin()).toString();
   const name = friend.trim() || "친구";
-  const message = `${name}님, ${o.label} 정말 축하해요! ${o.emoji}\n받고 싶은 선물 링크를 남겨주면 친구들이랑 마음 모아 선물할게요.`;
+  const message = `${name}님, ${o.label} 정말 축하해요! ${o.emoji}\n받고 싶은 선물 링크를 남겨주면 친구들이랑 함께 선물할게요.`;
 
   /** [복사]·[링크 복사]: 주소창에 바로 붙여넣을 수 있게 순수 URL만 복사 */
   const copyLink = async () => {

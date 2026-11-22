@@ -139,7 +139,7 @@ export function StakeOverlay({
                   className="max-w-full truncate rounded-full px-2 py-0.5 text-center text-[11px] font-bold leading-tight text-white shadow-sm"
                   style={{ backgroundColor: s.color }}
                 >
-                  {wide && l.pct ? `지분 ${l.pct}% - ${l.name}` : l.pct ? `${l.pct}% ${l.name}` : l.name}
+                  {wide && l.pct ? `조각 ${l.pct}% - ${l.name}` : l.pct ? `${l.pct}% ${l.name}` : l.name}
                 </span>
               )}
             </div>
@@ -198,12 +198,12 @@ export function StakeMapSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      title="지분 지도"
-      description={viewerIsOwner ? "친구들이 보탠 만큼 선물 위에 자리를 나눴어요" : "다른 친구의 지분은 가려지고, 내 자리만 보여요"}
+      title="선물 조각 지도"
+      description={viewerIsOwner ? "친구들이 보탠 만큼 선물 위에 자리를 나눴어요" : "다른 친구의 조각은 가려지고, 내 자리만 보여요"}
       footer={
         viewerIsOwner && onMakeCard ? (
           <Button onClick={onMakeCard}>
-            <Sparkles size={19} /> 지분 인증 카드 만들기
+            <Sparkles size={19} /> 선물 인증 카드 만들기
           </Button>
         ) : undefined
       }
@@ -219,7 +219,7 @@ export function StakeMapSheet({
       />
 
       <div className="mt-3 flex items-center justify-between text-[13px]">
-        <span className="font-semibold text-grey-800">목표 {won(funding.goal)} 중 {filledPct}% 채워졌어요</span>
+        <span className="font-semibold text-grey-800">선물 총액 {won(funding.goal)} 중 {filledPct}% 채워졌어요</span>
         {rest.amount > 0 && (
           <span className="flex items-center gap-1.5 text-grey-500">
             <span className="h-2.5 w-2.5 rounded-[3px] border border-grey-400 bg-grey-200" />
@@ -253,13 +253,13 @@ export function StakeMapSheet({
               </li>
             )}
           </ul>
-          {!onMakeCard && <p className="pb-2 pt-5 text-[13px] text-grey-500">선물이 완성되면 공유용 지분 인증 카드를 만들 수 있어요.</p>}
+          {!onMakeCard && <p className="pb-2 pt-5 text-[13px] text-grey-500">선물이 완성되면 공유용 선물 인증 카드를 만들 수 있어요.</p>}
         </>
       ) : (
         <div className="mb-2 mt-5 rounded-2xl bg-grey-50 p-4 text-center">
           {me ? (
             <>
-              <p className="text-[13px] text-grey-500">선물 목표 금액 중 내 지분</p>
+              <p className="text-[13px] text-grey-500">선물 총액 중 내 조각</p>
               <p className="mt-0.5 text-[24px] font-bold" style={{ color: me.color }}>
                 {stakePct(me)}%
               </p>
@@ -298,12 +298,12 @@ export function StakeCardSheet({
   const top = stakes.slice(0, 4);
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="지분 인증 카드" description="인스타 스토리나 카톡으로 함께한 친구들에게 자랑해보세요">
+    <BottomSheet open={open} onClose={onClose} title="선물 인증 카드" description="인스타 스토리나 카톡으로 함께한 친구들에게 자랑해보세요">
       <div className="mt-4 rounded-[28px] bg-gradient-to-br from-[#0064FF] via-[#5B5BFF] to-[#B04CFF] p-3.5">
         <div className="rounded-[22px] bg-white p-4">
           <div className="flex items-center justify-between">
             <span className="text-[12px] font-black tracking-[0.14em] text-toss-blue">MOGIVING</span>
-            <span className="rounded-full bg-grey-100 px-2 py-0.5 text-[11px] font-semibold text-grey-600">지분 인증서</span>
+            <span className="rounded-full bg-grey-100 px-2 py-0.5 text-[11px] font-semibold text-grey-600">선물 인증서</span>
           </div>
           <p className="mt-2 text-[19px] font-bold leading-snug text-grey-900">
             이 선물, 친구 {friends}명이
@@ -326,7 +326,7 @@ export function StakeCardSheet({
               <li key={s.key} className="flex items-center gap-2 text-[13px]">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.color }} />
                 <span className="font-semibold text-grey-800">{s.name}</span>
-                {showPct && <span className="ml-auto font-bold text-grey-900">지분 {stakePct(s)}%</span>}
+                {showPct && <span className="ml-auto font-bold text-grey-900">조각 {stakePct(s)}%</span>}
               </li>
             ))}
           </ul>
@@ -334,13 +334,13 @@ export function StakeCardSheet({
 
           <div className="mt-3 flex items-center justify-between border-t border-dashed border-grey-200 pt-3 text-[11px] text-grey-500">
             <span>{funding.ownerName}님의 선물 · {new Date().toLocaleDateString("ko-KR")}</span>
-            <span>#모기빙 #지분인증</span>
+            <span>#모기빙 #선물인증</span>
           </div>
         </div>
       </div>
 
       <label className="mt-4 flex items-center justify-between rounded-2xl bg-grey-50 px-4 py-3 text-[14px] font-medium text-grey-700">
-        지분 비율(%) 표시하기
+        조각 비율(%) 표시하기
         <Switch checked={showPct} onChange={setShowPct} />
       </label>
 
@@ -356,7 +356,7 @@ export function StakeCardSheet({
             label: "카카오톡",
             icon: <MessageCircle size={24} className="fill-[#3A1D1D] text-[#3A1D1D]" />,
             bg: "#FEE500",
-            msg: "카카오톡으로 지분 인증 카드를 보냈어요",
+            msg: "카카오톡으로 선물 인증 카드를 보냈어요",
           },
           { label: "이미지 저장", icon: <Download size={22} className="text-grey-700" />, bg: "#F2F4F6", msg: "카드 이미지를 앨범에 저장했어요" },
         ].map((s) => (

@@ -138,7 +138,7 @@ export function ParticipateSheet({
               <span className="font-bold text-grey-800">1조각 {shortWon(pieces.unit)}</span>
               <span className="text-grey-500">
                 <span className="mr-1 inline-block h-2.5 w-2.5 rounded-[3px] bg-toss-blue align-middle" />
-                모인 조각 {pieces.filled}
+                채워진 조각 {pieces.filled}
               </span>
             </div>
             <PieceGrid total={pieces.total} filled={pieces.filled} selected={count} />
@@ -205,7 +205,7 @@ export function ParticipateSheet({
           )}
           {freeAmount > 0 && problem === "too_small" && <p className="mt-2 text-[13px] text-toss-red">1,000원부터 참여할 수 있어요</p>}
           {problem === "leaves_too_little" && <p className="mt-2 text-[13px] text-toss-red">결제 후 100원 미만이 남지 않게 금액을 조금 바꿔 주세요</p>}
-          <p className="mt-2 text-[12px] text-grey-500">목표 금액을 넘는 금액은 결제되지 않아요 · 최대 {won(remaining)}</p>
+          <p className="mt-2 text-[12px] text-grey-500">선물 총액을 넘는 금액은 결제되지 않아요 · 최대 {won(remaining)}</p>
         </>
       )}
 
@@ -238,7 +238,7 @@ export function ParticipateSheet({
         <Lock size={12} /> 다른 친구들에게는 내 금액과 메시지가 보이지 않아요
       </p>
       <p className="mt-1.5 flex items-start gap-1 text-[12px] leading-relaxed text-grey-500">
-        <Info size={12} className="mt-[3px] shrink-0" /> 목표 금액에는 원활한 선물 전달을 위한 플랫폼 수수료 {FEE_PERCENT}%가 포함되어 있어요
+        <Info size={12} className="mt-[3px] shrink-0" /> 선물 총액에는 원활한 선물 전달을 위한 플랫폼 수수료 {FEE_PERCENT}%가 포함되어 있어요
       </p>
       {/* 결제 화면 하단: 결제 즉시 구매 확정되는 상품임을 결제 버튼 누르기 전에 알린다 */}
       <GiftVoucherNotice className="mb-2 mt-4" />

@@ -7,7 +7,6 @@ export type Product = {
   brand: string;
   name: string;
   price: number;
-  originalPrice?: number;
   emoji: string;
   bg: string;
   category: string;
@@ -26,8 +25,6 @@ export type Product = {
   imageUrl?: string;
   /** 운영자 추천 큐레이션 상품 여부 */
   curated?: boolean;
-  rating?: number;
-  reviews?: number;
 };
 
 export type Participant = {
