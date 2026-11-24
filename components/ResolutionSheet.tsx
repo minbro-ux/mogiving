@@ -148,7 +148,7 @@ export function ResolutionSheet({
         {errorBox}
         <ProductRow product={product} />
         <p className="mt-4 rounded-xl bg-grey-50 px-4 py-3 text-[13px] leading-relaxed text-grey-600">
-          친구들이 보낸 선물 교환권은 이미 구매 확정되어 취소되지 않아요. 아래 두 가지 중 원하는 방법으로 받아요.
+          친구들이 보낸 선물 교환권은 이미 구매 확정되어 기간이 끝나도 취소되지 않아요. 아래 두 가지 중 원하는 방법으로 받아요.
         </p>
 
         <ChoiceCard

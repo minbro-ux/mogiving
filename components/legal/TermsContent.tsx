@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Ol, PolicyBlock, Section, Ul } from "@/components/LegalPage";
 import { COMPANY, POLICY_EFFECTIVE_DATE } from "@/lib/company";
 import { FEE_PERCENT } from "@/lib/fee";
-import { FUNDING_PERIOD_DAYS, MIN_AMOUNT, UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE, VOUCHER_SEND_BUSINESS_DAYS, VOUCHER_TYPES } from "@/lib/policy";
+import { FUNDING_PERIOD_DAYS, MIN_AMOUNT, REFUND_CLAUSES, UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE, VOUCHER_SEND_BUSINESS_DAYS, VOUCHER_TYPES } from "@/lib/policy";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -52,7 +52,7 @@ export function TermsContent() {
         <Ol>
           <li>
             <b className="text-grey-900">
-              본 서비스에서 결제되는 상품은 지정된 공동 선물의 구매를 위해 발행되는 전용 디지털 교환권으로, 결제 및 수령인 적립과 동시에 재화(디지털 교환권)의 공급이 완료된 것으로 간주합니다.
+              본 서비스에서 결제되는 상품은 지정된 공동 선물의 구매를 위해 발행되는 전용 디지털 교환권(디지털 바우처)으로, 결제 완료 즉시 수령인에게 확정 발급·전달됩니다.
             </b>
           </li>
           <li>{VOUCHER_ISSUE_NOTICE}</li>
@@ -105,7 +105,7 @@ export function TermsContent() {
               </li>
             </Ul>
           </li>
-          <li>수령인이 수령 방식을 고를 때까지 선물 적립 금액은 그대로 보관되며, 한 번 고른 수령 방식은 바꿀 수 없어요.</li>
+          <li>수령인이 수령 방식을 고를 때까지 선물 적립 금액은 그대로 보관되며, 한 번 고른 수령 방식은 바꿀 수 없어요. 수령인이 실물 선물을 선택하지 않은 경우의 처리는 제10조 제4항을 따라요.</li>
           <li>적립된 선물 교환권은 현금·포인트 등으로 지급하지 않아요.</li>
           <li>상품 품절이나 판매처 가격 인상 등으로 지정 상품을 주문할 수 없으면 회사는 수령인에게 알리고, 수령인의 선택에 따라 같은 금액의 모바일 상품권으로 전환하거나 모든 결제를 취소해요.</li>
         </Ol>
@@ -113,8 +113,13 @@ export function TermsContent() {
       </Section>
 
       <Section title="제10조 (청약철회와 환불)">
+        <Ol>
+          {REFUND_CLAUSES.map((c) => (
+            <li key={c}>{c}</li>
+          ))}
+        </Ol>
         <p>
-          선물 교환권은 결제와 동시에 공급이 완료되는 디지털 재화이므로 단순 변심에 의한 청약철회와 환불이 제한돼요. 결제 취소가 되는 경우, 실물 상품의 반품·교환, 환불 방법과 기간은{" "}
+          결제 취소가 되는 경우, 실물 상품의 반품·교환, 환불 방법과 기간은{" "}
           <Link href="/terms#refund" className="font-medium text-toss-blue underline underline-offset-2">취소 및 환불 정책</Link>에서 정한 바를 따라요.
         </p>
       </Section>

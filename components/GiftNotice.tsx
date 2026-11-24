@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
-import { UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE } from "@/lib/policy";
+import { REFUND_NOTICE, UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE } from "@/lib/policy";
 
 /**
  * 선물 교환권 구매 안내 (상품 상세·결제 화면 하단 고정 문구).
@@ -15,6 +15,7 @@ export function GiftVoucherNotice({ className = "" }: { className?: string }) {
       <ul className="mt-2 space-y-1.5">
         <li className="font-semibold text-grey-900">• {VOUCHER_ISSUE_NOTICE}</li>
         <li>• {UNDER_GOAL_NOTICE}</li>
+        <li>• {REFUND_NOTICE}</li>
       </ul>
       <p className="mt-2 text-[12px] text-grey-500">
         자세한 내용은{" "}

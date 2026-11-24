@@ -426,7 +426,7 @@ function StatusCard({ funding, raised, isOwner, onResolve }: { funding: Funding;
             ? `친구들이 보낸 선물 교환권 ${won(raised)}은 그대로 적립돼 있어요. 남은 차액 ${won(funding.goal - raised)}을 결제해 실물로 받거나, 적립 금액(원가 기준)만큼 모바일 상품권으로 받을 수 있어요.`
             : "배송지를 입력해 접수하면 쇼핑몰 주문을 진행해 드려요."
           : under
-            ? `보내주신 선물 교환권은 취소되지 않고 ${funding.ownerName}님께 그대로 전달돼요. ${funding.ownerName}님이 차액을 결제해 실물로 받거나 모바일 상품권으로 받아요.`
+            ? `보내주신 선물 교환권은 기간이 끝나도 취소되지 않고 ${funding.ownerName}님께 그대로 전달돼요. ${funding.ownerName}님이 차액을 결제해 실물로 받거나 모바일 상품권으로 받아요.`
             : `${funding.ownerName}님이 배송지를 입력하면 실물 선물이 발송돼요.`}
       </p>
       {isOwner && (

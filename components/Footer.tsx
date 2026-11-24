@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { COMPANY, LEGAL_LINKS, bizInfoUrl } from "@/lib/company";
-import { UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE } from "@/lib/policy";
+import { REFUND_NOTICE, UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE } from "@/lib/policy";
 
 /**
  * 서비스 공통 하단 사업자 정보 (app/layout.tsx에서 모든 화면에 렌더링).
@@ -68,7 +68,7 @@ export function Footer() {
         </dl>
 
         <div className="mt-4 space-y-1">
-          <p>{VOUCHER_ISSUE_NOTICE} {UNDER_GOAL_NOTICE} 선물 교환권은 결제와 동시에 공급이 완료되는 디지털 재화로 단순 변심에 의한 환불이 제한됩니다.</p>
+          <p>{VOUCHER_ISSUE_NOTICE} {UNDER_GOAL_NOTICE} {REFUND_NOTICE}</p>
         </div>
         <p className="mt-4 text-grey-400">Copyright © 2026 {COMPANY.name} ({COMPANY.brand}). All rights reserved.</p>
       </div>

@@ -18,7 +18,7 @@ export const COMPANY = {
 } as const;
 
 /** 약관·개인정보처리방침·환불 정책 시행일. 정책을 개정하면 이 값을 바꾸고, 시행 7일 전(이용자에게 불리하면 30일 전)부터 공지한다 */
-export const POLICY_EFFECTIVE_DATE = "2026년 11월 21일";
+export const POLICY_EFFECTIVE_DATE = "2026년 11월 24일";
 
 /** 개인정보 보호책임자 */
 export const PRIVACY_OFFICER = { name: COMPANY.ceo, title: "대표", phone: COMPANY.phone, email: COMPANY.email } as const;

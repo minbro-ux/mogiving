@@ -21,7 +21,7 @@ export function SafetyNote() {
         <PackageCheck size={16} className="shrink-0 text-grey-500" /> 선물이 100% 완성되면 쇼핑몰에서 실물로 배송돼요
       </p>
       <p className="flex items-center gap-2">
-        <BadgeCheck size={16} className="shrink-0 text-grey-500" /> 기간 내 미완성이어도 결제는 취소되지 않고, 차액 결제 또는 모바일 상품권으로 받아요
+        <BadgeCheck size={16} className="shrink-0 text-grey-500" /> 기간 내 미완성이어도 그 이유로 결제가 취소되지 않고, 차액 결제 또는 모바일 상품권으로 받아요
       </p>
     </div>
     <GiftVoucherNotice className="mb-2 mt-3" />

@@ -1,7 +1,7 @@
 import { Ol, PolicyBlock, Section, Ul } from "@/components/LegalPage";
 import { COMPANY } from "@/lib/company";
 import { FEE_PERCENT } from "@/lib/fee";
-import { UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE, VOUCHER_SEND_BUSINESS_DAYS } from "@/lib/policy";
+import { REFUND_CLAUSES, UNDER_GOAL_NOTICE, VOUCHER_ISSUE_NOTICE, VOUCHER_SEND_BUSINESS_DAYS } from "@/lib/policy";
 
 export function RefundContent() {
   const tel = <a href={`tel:${COMPANY.phone.replace(/\D/g, "")}`} className="underline underline-offset-2">{COMPANY.phone}</a>;
@@ -19,25 +19,23 @@ export function RefundContent() {
     >
       <Section title="1. 상품(선물 교환권)의 성격">
         <p>
-          본 서비스에서 결제되는 상품은 지정된 공동 선물의 구매를 위해 발행되는 전용 디지털 교환권으로, 결제 및 수령인 적립과 동시에 재화(디지털 교환권)의 공급이 완료된 것으로 간주합니다.
+          본 서비스에서 결제되는 상품은 지정된 공동 선물의 구매를 위해 발행되는 전용 디지털 교환권(디지털 바우처)으로, 결제 완료 즉시 수령인에게 확정 발급·전달됩니다.
           적립된 선물 교환권은 지정 선물 상품의 구매 또는 모바일 상품권 전환에만 사용되며 현금으로 지급되지 않습니다.
         </p>
       </Section>
 
-      <Section title="2. 단순 변심에 의한 환불 제한">
+      <Section title="2. 청약철회 및 환불">
         <Ol>
-          <li>
-            선물 교환권은 결제 즉시 발행되어 수령인에게 적립(공급 완료)되므로, 전자상거래법 제17조 제2항에 따라 <b className="text-grey-900">단순 변심에 의한 청약철회 및 환불이 제한</b>됩니다. 회사는 이 사실을 결제 화면에 미리 표시합니다.
-          </li>
-          <li>
-            선물 기간이 끝날 때까지 선물 총액이 다 채워지지 않은 경우에도 <b className="text-grey-900">결제는 취소되지 않으며</b>, 아래 3항에 따라 수령인이 수령 방식을 선택합니다.
-          </li>
-          <li>선물 총액이 모두 채워져 실물 상품 발주가 시작된 이후에는 여러 참여자의 선물 교환권으로 하나의 상품을 구매한 것이므로 개별 참여자의 결제만 따로 취소할 수 없습니다.</li>
-          <li>다만 중복 결제·결제 금액 오류 등 결제 과정의 오류는 확인 즉시 해당 결제를 전액 취소합니다.</li>
+          {REFUND_CLAUSES.map((c) => (
+            <li key={c}>{c}</li>
+          ))}
+          <li>청약철회는 결제 시 받은 주문번호와 함께 아래 7항의 고객센터로 요청하며, 환불은 6항에 따라 처리합니다.</li>
+          <li>중복 결제·결제 금액 오류 등 결제 과정의 오류는 위 기간과 관계없이 확인 즉시 해당 결제를 전액 취소합니다.</li>
         </Ol>
       </Section>
 
       <Section title="3. 선물 기간 종료 시 처리 (차액 결제 또는 모바일 상품권 전환)">
+        <p>선물 기간이 끝날 때까지 선물 총액이 다 채워지지 않아도 그 이유로 결제가 취소되지 않으며, 수령인이 다음 중 하나를 골라 선물을 받습니다.</p>
         <Ol>
           <li>
             <b className="text-grey-900">차액 결제:</b> 수령인이 선물 총액에서 선물 적립 금액을 뺀 남은 차액을 결제하면 선물이 100% 완성되고, 수령인이 입력한 배송지로 실물 상품이 발송됩니다.
