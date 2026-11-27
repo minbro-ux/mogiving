@@ -21,6 +21,9 @@ export const PRODUCTS: Product[] = [
       "콜 그레이 / M", "콜 그레이 / L", { label: "콜 그레이 / XL", soldOut: true }, "콜 그레이 / XXL",
       "아이보리 / M", "아이보리 / L", { label: "아이보리 / XL", soldOut: true }, "아이보리 / XXL",
     ],
+    // 공식 대표 이미지(블랙 정면, thron CDN 1571x2095)를 상품 중심 1500x1500으로 잘라 800x800 JPEG로 저장해 사용.
+    // 큐레이션 썸네일은 mix-blend-multiply라 회색(#F1F1F1) 배경을 흰색으로 올려 두었다. 곱해지면 bg와 같은 #F1F1F1이 된다
+    imageUrl: "/images/stone-island-6100008-crewneck-sweatshirt-black.jpg",
   },
   {
     id: "p22",
