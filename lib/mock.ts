@@ -17,7 +17,8 @@ export const PRODUCTS: Product[] = [
     url: "https://www.prada.com/kr/ko/p/%ED%94%84%EB%9D%BC%EB%8B%A4-%EB%A6%AC%EC%97%90%EB%94%94%EC%85%98-2008-%EB%A6%AC%EB%82%98%EC%9D%BC%EB%A1%A0-%EB%AF%B8%EB%8B%88%EB%B0%B1/1NE075_RDH0_F0002",
     // 공식 상품 페이지의 다른 색상(1NE075_RDH0_ F0002·F0134·F0216·F0638·F0K74·F0S73) 기준. 기본 블랙을 맨 앞에 둬 개설 화면에서 먼저 골라지게 한다
     options: ["블랙", "브랜디", "발틱 블루", "베고니아 핑크", "초크 화이트", "파파야"],
-    // 공식 대표 이미지(블랙, 2400x3000 _SLF)를 상품이 카드(정사각형)에 차도록 가운데 1800x1800으로 잘라 800x800 JPEG로 저장해 사용
+    // 공식 대표 이미지(블랙, 2400x3000 _SLF)를 상품이 카드(정사각형)에 차도록 가운데 1800x1800으로 잘라 800x800 JPEG로 저장해 사용.
+    // 큐레이션 썸네일은 mix-blend-multiply라 회색(#ECECEC) 배경을 흰색으로 올려 두었다. 곱해지면 bg와 같은 #ECECEC가 돼 사진 경계가 안 보인다
     imageUrl: "/images/prada-re-edition-2008-mini-bag-black.jpg",
   },
   {
