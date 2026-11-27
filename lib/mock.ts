@@ -5,6 +5,24 @@ import type { Funding, Participant, Product, ShippingAddress } from "./types";
 /** 운영자 추천 큐레이션 (구매처 링크 포함) */
 export const PRODUCTS: Product[] = [
   {
+    id: "p23",
+    brand: "STONE ISLAND",
+    name: "스톤아일랜드 래글런 슬리브 오버사이즈 핏 크루넥 스웨트셔츠 (6100008 오가닉 코튼 플리스)",
+    // 공식몰 국내 판매가. stoneisland.com은 WAF 봇 차단(403)이라 운영자가 공식몰에서 확인한 값 (2026-11-28). 모델 코드 L2S156100008S0051V0029
+    price: 630000,
+    emoji: "👕",
+    bg: "#F1F1F1",
+    category: "패션/의류",
+    mall: "STONE ISLAND",
+    url: "https://www.stoneisland.com/ko-kr/collection/%ED%94%8C%EB%A6%AC%EC%8A%A4%EC%9B%A8%EC%96%B4/%EB%9E%98%EA%B8%80%EB%9F%B0-%EC%8A%AC%EB%A6%AC%EB%B8%8C-%EC%98%A4%EB%B2%84%EC%82%AC%EC%9D%B4%EC%A6%88-%ED%95%8F-%ED%81%AC%EB%A3%A8%EB%84%A5-%EC%8A%A4%EC%9B%A8%ED%8A%B8%EC%85%94%EC%B8%A0-6100008-organic-cotton-fleece-L2S156100008S0051V0029.html",
+    // 옵션 칩이 한 줄 단일 선택이라 색상 × 사이즈를 묶었다. 색상 3종·사이즈 M/L/XL/XXL, XL 품절은 운영자가 공식몰에서 확인한 값
+    options: [
+      "블랙 / M", "블랙 / L", { label: "블랙 / XL", soldOut: true }, "블랙 / XXL",
+      "콜 그레이 / M", "콜 그레이 / L", { label: "콜 그레이 / XL", soldOut: true }, "콜 그레이 / XXL",
+      "아이보리 / M", "아이보리 / L", { label: "아이보리 / XL", soldOut: true }, "아이보리 / XXL",
+    ],
+  },
+  {
     id: "p22",
     brand: "PRADA",
     name: "프라다 리에디션 2008 리나일론 미니백",
